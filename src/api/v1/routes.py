@@ -8,4 +8,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
+from src.api.v1.faq import router as faq_router
+
 api_router = APIRouter()
+api_router.include_router(faq_router)
