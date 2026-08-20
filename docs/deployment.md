@@ -230,6 +230,7 @@ FAQ_LLM_MODEL=gemini-3.7-flash
 FAQ_REASONING_EFFORT=low       # reasoning bills as output; keep bulk extraction cheap
 FAQ_ITEMS_PER_DOCUMENT=5
 FAQ_GENERATION_TIMEOUT_SECONDS=120
+FAQ_GENERATION_CONCURRENCY=20
 
 # --- Embeddings (verified working) ---
 EMBEDDING_BASE_URL=https://api.avalai.ir/v1

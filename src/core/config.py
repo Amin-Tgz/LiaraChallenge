@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     faq_reasoning_effort: str = "low"
     faq_items_per_document: int = 5
     faq_generation_timeout_seconds: float = 120.0
+    faq_generation_concurrency: int = 20
 
     # --- Embeddings ---
     embedding_base_url: str = "https://api.avalai.ir/v1"
@@ -128,6 +129,13 @@ class Settings(BaseSettings):
     def _positive_rrf_k(cls, v: int) -> int:
         if v <= 0:
             raise ValueError("RRF_K must be positive")
+        return v
+
+    @field_validator("faq_generation_concurrency")
+    @classmethod
+    def _positive_faq_concurrency(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("FAQ_GENERATION_CONCURRENCY must be positive")
         return v
 
     @field_validator(

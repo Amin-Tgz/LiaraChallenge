@@ -22,6 +22,11 @@ def test_default_embedding_dimensions_is_1536() -> None:
     assert _settings().embedding_dimensions == 1536
 
 
+def test_faq_generation_concurrency_must_be_positive() -> None:
+    with pytest.raises(ValueError, match="FAQ_GENERATION_CONCURRENCY must be positive"):
+        _settings(faq_generation_concurrency=0)
+
+
 @pytest.mark.parametrize(
     ("overrides", "message"),
     [

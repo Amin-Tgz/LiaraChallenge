@@ -4,7 +4,7 @@ import json
 import uuid
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from src.core.errors import ErrorCode
@@ -57,6 +57,12 @@ async def test_malformed_faq_is_recorded_and_run_continues(
     ).scalar_one()
     question = f"پرسش معتبر آزمایشی {uuid.uuid4()} چیست؟"
     generator = MixedGenerator(question)
+    # The real corpus may already have generated FAQ rows. Hide this document's
+    # rows inside the rolled-back test transaction so the initial-generation
+    # path remains deterministic without assuming an empty table.
+    await migrated.execute(
+        update(FaqItem).where(FaqItem.source_document_id == document_id).values(is_active=False)
+    )
 
     report = await generate_document_faqs(migrated, document_id, generator)
 

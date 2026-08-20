@@ -65,7 +65,7 @@
 - [x] 8.3 Implement the synchronous FAQ search endpoint; verify no answer-generation model call occurs on this path
 - [x] 8.4 Implement solved/unresolved feedback persistence and unresolved-question recording; verify both outcomes are queryable afterwards
 - [x] 8.5 Record impressions, selections, and transitions to each rescue tool; verify events appear in usage_events
-- [ ] 8.6 **Run FAQ generation across the corpus and verify entries exist with correct source attribution**
+- [x] 8.6 **Run FAQ generation across the corpus and verify entries exist with correct source attribution**
 
 ## 9. Chat agent
 

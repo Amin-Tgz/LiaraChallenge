@@ -470,6 +470,7 @@ async def generate_document_faqs(
         await executor.execute(
             select(FaqItem.id)
             .where(
+                FaqItem.source_document_id == document.id,
                 FaqItem.source_content_hash == document.content_hash,
                 FaqItem.is_active.is_(True),
             )
@@ -495,7 +496,11 @@ async def generate_document_faqs(
         {"ordinal": row.ordinal, "heading_anchor": row.heading_anchor, "text": row.text}
         for row in chunks
     ]
-    raw = generator.generate(title=document.title, chunks=chunk_payload)
+    raw = await asyncio.to_thread(
+        generator.generate,
+        title=document.title,
+        chunks=chunk_payload,
+    )
     parsed = parse_generated_faqs(raw, {row.ordinal for row in chunks})
     by_ordinal = {row.ordinal: row for row in chunks}
 
