@@ -20,14 +20,30 @@ from src.api.health import router as health_router
 from src.api.v1.routes import api_router
 from src.core.config import get_settings
 from src.core.errors import ErrorCode, RescueError, spec_for
-from src.core.logging import clear_correlation, configure_logging, get_logger, set_correlation
+from src.core.logging import (
+    clear_correlation,
+    configure_logging,
+    get_logger,
+    set_correlation,
+    shutdown_telemetry_logging,
+)
+from src.services.metrics import PrometheusMiddleware, prometheus_response
 
 logger = get_logger(__name__)
 
 API_PREFIX = "/api/v1"
 
 #: Paths the SPA catch-all must never answer for.
-_RESERVED_PREFIXES = ("api/", "health/", "mcp", "docs", "redoc", "openapi.json", "assets/")
+_RESERVED_PREFIXES = (
+    "api/",
+    "health/",
+    "metrics",
+    "mcp",
+    "docs",
+    "redoc",
+    "openapi.json",
+    "assets/",
+)
 
 
 @asynccontextmanager
@@ -42,6 +58,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await close_redis()
     await dispose_engine()
     logger.info("api stopped")
+    shutdown_telemetry_logging()
 
 
 def create_app() -> FastAPI:
@@ -53,6 +70,14 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
         docs_url="/docs",
     )
+    app.add_middleware(PrometheusMiddleware)
+    if settings.metrics_enabled:
+        app.add_api_route(
+            settings.metrics_path,
+            prometheus_response,
+            methods=["GET"],
+            include_in_schema=False,
+        )
 
     @app.middleware("http")
     async def correlate(request: Request, call_next):  # type: ignore[no-untyped-def]

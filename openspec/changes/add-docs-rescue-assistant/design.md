@@ -98,7 +98,7 @@ Chunks carry an `index_version`; activation flips a pointer row. Retrieval alway
 
 ### Two environments, one set of images
 
-There is no self-hosted tier. Local development runs the whole stack on Docker Desktop via `docker compose`; production runs the same services on Liara, with Postgres and Redis as Liara-managed instances. The Portkey gateway is our own container image in both — we run the open-source gateway, not Portkey's managed SaaS. Opik is the only external SaaS: nothing is deployed for it and both environments call the same endpoint.
+There is no self-hosted tier. Local development runs the whole stack on Docker Desktop via `docker compose`; production runs the same services on Liara, with Postgres and Redis as Liara-managed instances. The Portkey gateway, Prometheus, Grafana, Loki, and Grafana Alloy are project-owned containers in both environments. Monitoring storage is persistent and telemetry delivery stays off the user request path. Opik is the only external SaaS: nothing is deployed for it and both environments call the same endpoint.
 
 Keeping `docker compose up` sufficient to run everything locally is what keeps the dev/prod gap small enough that "works locally" means something.
 

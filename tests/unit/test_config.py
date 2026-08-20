@@ -27,6 +27,12 @@ def test_faq_generation_concurrency_must_be_positive() -> None:
         _settings(faq_generation_concurrency=0)
 
 
+@pytest.mark.parametrize("path", ["metrics", "/"])
+def test_metrics_path_must_be_a_non_root_absolute_path(path: str) -> None:
+    with pytest.raises(ValueError, match="METRICS_PATH"):
+        _settings(metrics_path=path)
+
+
 @pytest.mark.parametrize(
     ("overrides", "message"),
     [

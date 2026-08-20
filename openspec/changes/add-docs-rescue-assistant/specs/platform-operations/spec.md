@@ -121,6 +121,23 @@ Failures in tracing, metrics, or logging infrastructure SHALL NOT cause a user r
 
 The system SHALL record request counts, latency, and error rates; queue depth and wait time; job outcomes including retries; provider fallback occurrences and circuit state; token usage and cost; cache hit rate; retrieval latency; FAQ resolution outcomes; transitions to each rescue tool; the active index commit and status; and the count of questions answered without sufficient evidence.
 
+The API SHALL expose runtime counters and latency distributions in Prometheus
+exposition format. Prometheus SHALL persist metrics, Grafana SHALL persist
+dashboards and alert rules, and Loki SHALL persist structured logs received
+through Grafana Alloy. Opik SHALL remain the retrieval, generation, and agent
+trace backend. Monitoring failures SHALL remain isolated from user requests.
+
+#### Scenario: Monitoring survives restart
+
+- **WHEN** Prometheus, Grafana, or Loki is restarted or redeployed
+- **THEN** retained metrics, dashboards, alert rules, and logs remain available from persistent storage
+
+#### Scenario: Monitoring backend unavailable
+
+- **WHEN** Prometheus, Grafana, Loki, Alloy, or Opik is unavailable during a rescue request
+- **THEN** the request continues and the telemetry delivery failure is logged without exposing credentials
+
+
 #### Scenario: Cost attributable
 
 - **WHEN** a request consumes model tokens

@@ -1,10 +1,10 @@
 ## 1. Pre-flight verification
 
 - [ ] 1.1 Rotate the AvalAI API key exposed during planning and verify the old key returns 401
-- [ ] 1.2 Create Postgres via `liara db:create` per docs/deployment.md §4; verify it appears in `liara db:list` with status OK
+- [x] 1.2 Create Postgres via `liara db:create` per docs/deployment.md §4; verify it appears in `liara db:list` with status OK
 - [ ] 1.3 **Manual step — the CLI cannot do this.** Enable Pgvector in the Liara panel before any data exists, accept the restart, then verify `SELECT extversion FROM pg_extension WHERE extname='vector'` returns a version
 - [ ] 1.4 Check `pg_trgm` availability via `pg_available_extensions` and record the result in design.md Open Questions
-- [ ] 1.5 Create Redis and the `liara-rescue-api`, `-worker`, and `-gateway` app services per docs/deployment.md §4; verify each appears in `liara app:list` and shares a private network with the database
+- [x] 1.5 Create Redis and the `liara-rescue-api`, `-worker`, and `-gateway` app services per docs/deployment.md §4; verify each appears in `liara app:list` and shares a private network with the database
 - [ ] 1.6 Confirm the fallback provider is reachable **from a deployed container** (not a local machine) and record the working base URL
 
 ## 2. Walking skeleton deployed (hour one)

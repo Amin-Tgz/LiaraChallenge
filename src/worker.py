@@ -11,7 +11,7 @@ import asyncio
 import signal
 
 from src.core.config import get_settings
-from src.core.logging import configure_logging, get_logger
+from src.core.logging import configure_logging, get_logger, shutdown_telemetry_logging
 from src.db.session import dispose_engine
 from src.services.redis_client import close_redis, get_redis
 
@@ -52,6 +52,7 @@ async def main() -> None:
         await close_redis()
         await dispose_engine()
         logger.info("worker stopped")
+        shutdown_telemetry_logging()
 
 
 if __name__ == "__main__":

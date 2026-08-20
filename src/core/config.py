@@ -114,6 +114,12 @@ class Settings(BaseSettings):
     # --- Observability ---
     opik_api_key: str = ""
     opik_workspace: str = ""
+    metrics_enabled: bool = True
+    metrics_path: str = "/metrics"
+    metrics_service_name: str = "liara-rescue-api"
+    otel_logs_enabled: bool = False
+    otel_exporter_otlp_logs_endpoint: str = ""
+    otel_service_name: str = "liara-rescue-api"
 
     @field_validator("embedding_dimensions")
     @classmethod
@@ -136,6 +142,13 @@ class Settings(BaseSettings):
     def _positive_faq_concurrency(cls, v: int) -> int:
         if v <= 0:
             raise ValueError("FAQ_GENERATION_CONCURRENCY must be positive")
+        return v
+
+    @field_validator("metrics_path")
+    @classmethod
+    def _absolute_metrics_path(cls, v: str) -> str:
+        if not v.startswith("/") or v == "/":
+            raise ValueError("METRICS_PATH must be an absolute non-root path")
         return v
 
     @field_validator("agent_max_tool_calls", "agent_max_rewrites")

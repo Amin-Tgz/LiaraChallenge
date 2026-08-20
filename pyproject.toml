@@ -20,6 +20,9 @@ dependencies = [
     "tiktoken==0.8.0",
     "python-multipart==0.0.20",
     "structlog==24.4.0",
+    "prometheus-client==0.26.0",
+    "opentelemetry-sdk==1.44.0",
+    "opentelemetry-exporter-otlp-proto-http==1.44.0",
 ]
 
 [dependency-groups]

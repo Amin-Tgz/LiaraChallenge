@@ -1,0 +1,15 @@
+{
+  "healthCheck": {
+    "command": [
+      "/bin/wget",
+      "-q",
+      "-O",
+      "/dev/null",
+      "http://127.0.0.1:3100/ready"
+    ],
+    "interval": 10000,
+    "timeout": 3000,
+    "retries": 10,
+    "startPeriod": 3000
+  }
+}

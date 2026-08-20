@@ -1,0 +1,31 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    environment: production
+    project: liara-docs-rescue
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: liara-rescue-api
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["liara-rescue-api:8000"]
+
+  - job_name: grafana-alloy
+    static_configs:
+      - targets: ["liara-rescue-alloy:12345"]
+
+  - job_name: loki
+    static_configs:
+      - targets: ["liara-rescue-loki:3100"]
+
+  - job_name: grafana
+    static_configs:
+      - targets: ["liara-rescue-grafana:3000"]

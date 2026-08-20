@@ -89,7 +89,7 @@ openspec/changes/<active>/  →  docs/deployment.md  →  این سند
 
 > هیچ ابزار زیرساختی یا قابلیت جانبی نباید باعث ناقص‌ماندن کیفیت پاسخ، UX اصلی، MCP، Skill یا استقرار روی لیارا شود.
 
-این قاعده مستقیماً باعث حذف OpenTelemetry، Prometheus، Grafana، Dozzle و Lazydocker از دامنه شد. داور تفاوت بین «پنج ابزار مانیتورینگ» و «structured logging به‌همراه داشبوردی با اعداد واقعی» را نمی‌بیند؛ ولی تفاوت در کیفیت پاسخ را قطعاً می‌بیند.
+پس از افزایش هدف ظرفیت به ۳۰۰ کاربر هم‌زمان، OpenTelemetry، Prometheus، Grafana، Loki و Alloy به دامنه‌ی استقرار اضافه شدند. این سرویس‌ها باید خارج از مسیر درخواست کاربر بمانند؛ اختلال telemetry نباید کیفیت پاسخ یا دسترس‌پذیری مسیر اصلی را کاهش دهد. Dozzle و Lazydocker همچنان خارج از دامنه‌اند.
 
 در معیار ۲۵ امتیازی هزینه هم، آنچه امتیاز می‌آورد **روایت** است: مسیر سریع FAQ، هدایت به Skill و MCP پیش از Chat، cache و ثبت token/cost. کل هزینه‌ی پروژه زیر ۲۰ دلار است، پس خودِ پول موضوع نیست.
 
@@ -230,7 +230,7 @@ Feedback باید برای analytics و بهبود ranking ذخیره شود.
 ### 7.4 قابلیت‌های P1 در صورت باقی‌ماندن زمان
 
 - Vision fallback برای تصاویر با alt ضعیف — مدل chat به‌صورت بومی vision دارد، پس هزینه‌ی افزوده‌ی آن صفر است و فقط یک prompt variant لازم دارد.
-- Grafana dashboard کامل.
+- توسعه‌ی dashboardهای Grafana فراتر از dashboard و alertهای عملیاتی پایه.
 - semantic cache پیشرفته.
 - پیشنهاد خودکار draft برای اصلاح مستندات.
 - سناریوهای failure در Playwright.
@@ -239,7 +239,7 @@ Feedback باید برای analytics و بهبود ranking ذخیره شود.
 
 ### 7.5 خارج از Scope مسابقه
 
-- OpenTelemetry، Prometheus، Grafana، Dozzle و Lazydocker — با structured logging و شمارنده‌های داخل Postgres جایگزین شدند.
+- Dozzle و Lazydocker — ابزارهای دستی توسعه‌دهنده‌اند، نه monitoring production.
 - اجرای Opik توسط خودمان — استک آن به ClickHouse، MySQL، MinIO و چند سرویس دیگر نیاز دارد.
 - اجرای embedding روی سخت‌افزار خودمان در production.
 - Kubernetes.
@@ -750,15 +750,15 @@ Retry فقط برای failureهای transient مانند timeout، 429 و 5xx ا
 
 ### 21.1 تفکیک مسئولیت
 
-> در نسخه‌ی دو روزه، پشته‌ی telemetry عمداً کوچک شد. شش ابزار مانیتورینگ برای یک توسعه‌دهنده در دو روز، دقیقاً همان «ابزار زیرساختی» است که قاعده‌ی بخش ۴ نسبت به آن هشدار می‌دهد. آنچه داور می‌بیند، داشبوردی با اعداد واقعی است، نه تعداد ابزارها.
+> برای آزمون بار ۳۰۰ کاربر هم‌زمان، telemetry عملیاتی به استقرار اضافه شد؛ اما همچنان خارج از مسیر درخواست است و خرابی آن نباید درخواست rescue را خراب کند.
 
 | ابزار | مسئولیت | وضعیت |
 | --- | --- | --- |
 | Opik (hosted) | LLM/RAG/Agent tracing، evaluation و cost | داخل Scope |
 | structured JSON logging | رویدادهای runtime همراه با correlation IDs | داخل Scope |
 | شمارنده‌ها در PostgreSQL | متریک‌های محصولی و داشبورد | داخل Scope |
-| OpenTelemetry / Prometheus | — | خارج از Scope |
-| Grafana | visualization و alerting | P1 |
+| OpenTelemetry / Prometheus | ارسال log با OTLP و متریک‌های runtime | داخل Scope |
+| Grafana / Loki / Alloy | visualization، alerting، ذخیره و انتقال log | داخل Scope |
 | Dozzle / Lazydocker | ابزار دستی توسعه‌دهنده، نه monitoring production | خارج از Scope |
 
 ### 21.2 Correlation IDs
@@ -1196,7 +1196,7 @@ Skill  ──نیاز دارد به──▶  MCP  ──نیاز دارد به�
 | failure هنگام deploy | health check، rollback و persisted jobs |
 | UI جذاب ولی ناکارآمد | Playwright، code/source UX و accessibility |
 | تصاویر بدون context | alt + surrounding text + metadata + selective Vision |
-| telemetry بیش‌ازحد پیچیده | Opik + حداقل OTel؛ Grafana کامل P1 |
+| telemetry بیش‌ازحد پیچیده | پشته‌ی محدود Prometheus/Grafana/Loki/Alloy؛ خارج از مسیر درخواست |
 | نبود داده‌ی FAQ واقعی | عنوان «پرسش‌های مرتبط» و feedback loop |
 
 ---
@@ -1216,7 +1216,7 @@ Skill  ──نیاز دارد به──▶  MCP  ──نیاز دارد به�
 - مدل Chat و FAQ: `gemini-3.7-flash`.
 - **ابعاد embedding: `1536`** — نه ۳۰۷۲ (سقف ایندکس HNSW در pgvector برابر ۲۰۰۰ است).
 - Observability LLM/RAG: Opik به‌صورت **SaaS** — تنها وابستگی خارجی پروژه.
-- Runtime telemetry: **structured JSON logging + شمارنده در PostgreSQL**. OpenTelemetry خارج از Scope.
+- Runtime telemetry: **structured JSON logging + شمارنده در PostgreSQL + Prometheus/Grafana/Loki/Alloy**؛ ارسال telemetry best-effort و خارج از مسیر درخواست است.
 - State: PostgreSQL.
 - Vector store: pgvector در PostgreSQL برای کاهش تعداد سرویس‌ها.
 - Queue/cache/rate limit/SSE relay: Redis.

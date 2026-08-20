@@ -47,6 +47,65 @@ services:
       timeout: 3s
       retries: 10
 
+  prometheus:
+    build:
+      context: ./monitoring/prometheus
+      dockerfile: Dockerfile
+    ports:
+      - "9090:9090"
+    volumes:
+      - prometheus-data:/prometheus
+    depends_on:
+      - api
+    networks:
+      default:
+        aliases: [liara-rescue-prometheus]
+
+  loki:
+    build:
+      context: ./monitoring/loki
+      dockerfile: Dockerfile
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki-data:/loki
+    networks:
+      default:
+        aliases: [liara-rescue-loki]
+
+  alloy:
+    build:
+      context: ./monitoring/alloy
+      dockerfile: Dockerfile
+    ports:
+      - "12345:12345"
+      - "4317:4317"
+      - "4318:4318"
+    depends_on:
+      - loki
+    networks:
+      default:
+        aliases: [liara-rescue-alloy]
+
+  grafana:
+    build:
+      context: ./monitoring/grafana
+      dockerfile: Dockerfile
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-local-development-only}
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - loki
+    networks:
+      default:
+        aliases: [liara-rescue-grafana]
+
   api:
     build:
       context: .
@@ -56,6 +115,9 @@ services:
       DATABASE_URL: postgresql+asyncpg://rescue:rescue@postgres:5432/rescue
       REDIS_URL: redis://redis:6379/0
       PORTKEY_BASE_URL: http://portkey:8787
+      OTEL_LOGS_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: http://alloy:4318/v1/logs
+      OTEL_SERVICE_NAME: liara-rescue-api
     ports:
       - "8000:8000"
     volumes:
@@ -68,6 +130,9 @@ services:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
       portkey: {condition: service_started}
+    networks:
+      default:
+        aliases: [liara-rescue-api]
 
   worker:
     build:
@@ -79,6 +144,9 @@ services:
       DATABASE_URL: postgresql+asyncpg://rescue:rescue@postgres:5432/rescue
       REDIS_URL: redis://redis:6379/0
       PORTKEY_BASE_URL: http://portkey:8787
+      OTEL_LOGS_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: http://alloy:4318/v1/logs
+      OTEL_SERVICE_NAME: liara-rescue-worker
     volumes:
       - ./src:/app/src
       - ./scripts:/app/scripts
@@ -90,3 +158,6 @@ services:
 volumes:
   postgres-data:
   redis-data:
+  prometheus-data:
+  loki-data:
+  grafana-data:

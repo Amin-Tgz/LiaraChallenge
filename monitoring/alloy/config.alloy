@@ -1,0 +1,42 @@
+logging {
+  level  = "info"
+  format = "json"
+}
+
+otelcol.receiver.otlp "default" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+
+  output {
+    logs = [otelcol.processor.batch.default.input]
+  }
+}
+
+otelcol.processor.batch "default" {
+  output {
+    logs = [otelcol.exporter.otlphttp.loki.input]
+  }
+}
+
+otelcol.exporter.otlphttp "loki" {
+  client {
+    endpoint = "http://liara-rescue-loki:3100/otlp"
+  }
+
+  sending_queue {
+    enabled       = true
+    queue_size    = 10000
+    num_consumers = 4
+  }
+
+  retry_on_failure {
+    enabled         = true
+    initial_interval = "1s"
+    max_interval     = "30s"
+    max_elapsed_time = "5m"
+  }
+}

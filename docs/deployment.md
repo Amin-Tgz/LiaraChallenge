@@ -24,7 +24,7 @@
 | Max input length | 8191 tokens/request — chunks target 500–800 | ✅ per AvalAI model card |
 | Gateway | Portkey gateway **as a Liara service** (own container image), not Portkey's managed SaaS | decided |
 | LLM observability | Opik **SaaS** (free tier) — the only external dependency, nothing to deploy | decided |
-| Runtime telemetry | structured JSON logs + counters in Postgres. No OTel/Prometheus/Grafana in v1 | decided |
+| Runtime telemetry | Prometheus metrics, Grafana dashboards/alerts, Loki logs, and Grafana Alloy collection; Opik remains the LLM/RAG trace backend | decided |
 | Chat execution | Redis queue + Worker, SSE relay via Redis | decided |
 | Web serving | React bundle served **from the API origin** (same-origin) | decided |
 | Auth | Admin only — HTTP Basic from env. No end-user auth | decided |
@@ -102,7 +102,9 @@ At 3072 with plain `vector`, every query degrades to a sequential scan. 1536 kee
                          └──────────────┘
 ```
 
-**Five services, ~5 GB total.**
+**Nine deployed services plus Opik SaaS.** The monitoring services are isolated
+from the user request path: telemetry delivery failure must never fail a rescue
+request.
 
 | Service | Plan | Rationale |
 |---|---|---|
@@ -111,6 +113,10 @@ At 3072 with plain `vector`, every query degrades to a sequential scan. 1536 kee
 | API + Web | 1 GB | uvicorn plus concurrently-held SSE connections. |
 | Worker | 1 GB | Ingestion peak. Stream files — never load all 1,142 at once. |
 | Portkey | 0.5 GB | Single Node container. |
+| Prometheus | 4 GB | Metrics retention and load-test analysis; persistent disk required. |
+| Grafana | 2 GB | Dashboards and alerts; persistent disk and admin secret required. |
+| Loki | 4 GB | Single-binary structured-log retention for this deployment; persistent disk required. |
+| Grafana Alloy | 1 GB | Receives application telemetry and forwards logs without requiring host-level Docker access. |
 
 ### Environments: local development vs Liara
 
@@ -124,12 +130,19 @@ Nothing is "self-hosted" in the sense of a machine you administer. There are exa
 | API + Web | container, hot reload | Liara app service |
 | Worker | container | Liara app service |
 | Portkey gateway | container from compose | Liara app service from the same image |
+| Prometheus | container with a named volume | Liara app service with a persistent disk |
+| Grafana | container with a named volume | Liara app service with a persistent disk |
+| Loki | single-binary container with a named volume | Liara app service with a persistent disk |
+| Grafana Alloy | container | Liara app service |
 | Opik | SaaS — same endpoint from both | SaaS |
 | Config | `.env` file, gitignored | Liara secrets panel |
 
 **The Portkey gateway is our own container image in both environments** — we run the open-source gateway rather than calling Portkey's managed SaaS. In development it comes up with `docker compose up`; in production Liara runs the same image as an app service.
 
-**Opik is the single external SaaS dependency.** Nothing about it is deployed; both environments call the same hosted endpoint. Running Opik ourselves is out of scope — its stack needs ClickHouse, MySQL, MinIO, and more.
+**Opik remains the single external SaaS dependency.** Nothing about it is
+deployed; both environments call the same hosted endpoint. Prometheus,
+Grafana, Loki, and Alloy are project-owned containers. Running Opik ourselves
+is out of scope — its stack needs ClickHouse, MySQL, MinIO, and more.
 
 `docker-compose.yml` must bring the whole stack up locally with one command, so the dev/prod gap stays small and the same images ship to Liara.
 
@@ -152,22 +165,35 @@ Run this at the **start of implementation**, not before — Liara bills hourly a
 
 ### Sizing and cost
 
-Plans and prices below are from `liara plan:list` on this account.
+Plans and prices below are from `liara plan:list` on this account. The current
+deployment is intentionally sized for a validation target of **300 concurrent
+users**. This is a capacity assumption, not a performance claim: the deployed
+chat path must still pass a representative load test, and upstream model
+concurrency/rate limits remain a separate bottleneck that larger Liara machines
+cannot remove.
 
 | Service | Plan | RAM | تومان/ماه |
 |---|---|---:|---:|
-| PostgreSQL | `standard-base-g2` | 2 GB | 1,049,998 |
-| Redis | `small-g2` | 0.5 GB | 349,999 |
-| API + Web | `medium-g2` | 1 GB | 599,998 |
-| Worker | `medium-g2` | 1 GB | 599,998 |
-| Portkey gateway | `small-g2` | 0.5 GB | 349,999 |
-| **Total** | | **5 GB** | **≈ 2,950,000** |
+| PostgreSQL | existing `standard-pro-g2` | existing | existing |
+| Redis | `standard-base-g2` + Pro bundle | 2 GB | 1,050,000 |
+| API + Web | `pro-g2` + Gold bundle | 8 GB | 3,300,000 |
+| Worker | `standard-base-g2` + Gold bundle | 2 GB | 1,050,000 |
+| Portkey gateway | `pro-g2` + Gold bundle | 8 GB | 3,300,000 |
+| Prometheus | `standard-plus-g2` + Gold bundle | 4 GB | 1,900,000 |
+| Grafana | `standard-base-g2` + Gold bundle | 2 GB | 1,050,000 |
+| Loki | `standard-plus-g2` + Gold bundle | 4 GB | 1,900,000 |
+| Grafana Alloy | `medium-g2` + Gold bundle | 1 GB | 600,000 |
+| **New capacity subtotal** | | **31 GB** | **≈ 14,150,000** |
 
-Roughly $25/month; hourly billing makes a 3-day competition run about 295,000 تومان (≈ $2.5).
+The subtotal excludes the already-provisioned PostgreSQL service. Right-size
+only after observing CPU, memory, database pool pressure, queue depth, gateway
+latency, and provider throttling during the 300-user test.
 
 ### Steps
 
-1. **Create PostgreSQL.**
+1. **Create PostgreSQL, or reuse the project database already provisioned for
+   this deployment.** The current deployment uses `liaradb` on
+   `standard-pro-g2`.
 
    ```bash
    liara db:create --name liara-rescue-db --type postgres --plan standard-base-g2
@@ -191,20 +217,74 @@ Roughly $25/month; hourly billing makes a 3-day competition run about 295,000 ت
 5. **Create Redis.**
 
    ```bash
-   liara db:create --name liara-rescue-redis --type redis --plan small-g2
+   liara db:create --name liara-rescue-redis --type redis --version 7.2.3 \
+     --plan standard-base-g2 --feature-plan pro --network liara-challenge
    ```
 
 6. **Create the three app services.**
 
    ```bash
-   liara app:create --app liara-rescue-api     --platform docker --plan medium-g2
-   liara app:create --app liara-rescue-worker  --platform docker --plan small-g2
-   liara app:create --app liara-rescue-gateway --platform docker --plan small-g2
+   liara app:create --app liara-rescue-api --platform docker \
+     --plan pro-g2 --feature-plan pro --network liara-challenge
+   liara app:create --app liara-rescue-worker --platform docker \
+     --plan standard-base-g2 --feature-plan pro --network liara-challenge
+   liara app:create --app liara-rescue-gateway --platform docker \
+     --plan pro-g2 --feature-plan pro --network liara-challenge
    ```
 
 7. **Put database and Redis on the same private network as the apps** so connection URIs use the private network rather than the public internet. `db:create` and `app:create` both accept `--network`.
 
-8. **Set env vars through the Liara panel's secrets UI.** Never deploy a `.env` file.
+8. **Create the monitoring services on the same private network.** Grafana may
+   expose HTTPS and requires a rotated admin secret. Prometheus, Loki, and
+   Alloy remain private. Attach the provisioned disks `prometheus-data`
+   (**40 GB**) at `/prometheus`, `grafana-data` (**10 GB**) at
+   `/var/lib/grafana`, and `loki-data` (**40 GB**) at `/loki` before the first
+   production deployment.
+
+   ```bash
+   liara app:create --app liara-rescue-prometheus --platform docker \
+     --plan standard-plus-g2 --feature-plan pro --network liara-challenge
+   liara app:create --app liara-rescue-grafana --platform docker \
+     --plan standard-base-g2 --feature-plan pro --network liara-challenge
+   liara app:create --app liara-rescue-loki --platform docker \
+     --plan standard-plus-g2 --feature-plan pro --network liara-challenge
+   liara app:create --app liara-rescue-alloy --platform docker \
+     --plan medium-g2 --feature-plan pro --network liara-challenge
+   ```
+
+   Production images are pinned in `monitoring/*/Dockerfile`: Prometheus
+   `v3.13.2`, Grafana `13.1.0`, Loki `3.7.4`, and Alloy `v1.17.1`. Prometheus
+   retains 15 days of metrics. Loki automatic deletion is disabled because its
+   filesystem delete store times out on a Liara persistent disk; the 40 GB disk
+   is the current log-capacity limit. Add a compatible object-store/delete
+   backend before enabling time-based Loki retention, and measure disk growth
+   during the 300-user test. Liara mounts this persistent disk root-owned, so
+   the Loki container currently runs as root; keep the service private and
+   replace this exception if Liara adds configurable disk ownership.
+
+   The project intentionally does not deploy the Kubernetes-oriented
+   `daviaraujocc/lgtm-stack`: it adds Helm, Mimir, Tempo, MinIO, and scalable
+   multi-process Loki assumptions that do not match this Liara PaaS topology.
+   Liara's one-click Grafana template is also insufficient by itself because
+   it provisions only Grafana and a disk, not Prometheus, Loki, or the OTLP
+   collector.
+
+9. **Set env vars through the Liara panel's secrets UI.** Never deploy a `.env` file.
+
+### Provisioning status (2026-08-20)
+
+The Liara team `6a87191155e397b04b0bead8` currently has the existing
+`liaradb` PostgreSQL service plus `liara-rescue-redis`, `liara-rescue-api`,
+`liara-rescue-worker`, `liara-rescue-gateway`, `liara-rescue-prometheus`,
+`liara-rescue-grafana`, `liara-rescue-loki`, and `liara-rescue-alloy`. All were
+created on private network `liara-challenge`; the three monitoring disks above
+were also created. Pgvector was enabled in the Liara panel on 2026-08-20; its
+SQL version check is still pending. The pinned gateway, Prometheus, Grafana,
+Loki, and Alloy releases have each passed their public HTTPS health endpoint.
+The API and worker have not been released because their Liara environment does
+not yet have the complete database, Redis, provider, and admin secret set.
+Migrations, ingestion, application readiness, and the 300-user load test remain
+deployment gates.
 
 > **Account hygiene.** This account already hosts `royara-api`, `royara-db`, and `makeupapp`, which are unrelated to this project. Every name above is prefixed `liara-rescue-` so nothing collides, and no existing resource is touched.
 

@@ -9,11 +9,21 @@ import pytest
 
 from src.core.logging import (
     JsonFormatter,
+    RedactingTelemetryHandler,
     clear_correlation,
     get_correlation,
     redact,
     set_correlation,
 )
+
+
+class _CaptureHandler(logging.Handler):
+    def __init__(self) -> None:
+        super().__init__()
+        self.records: list[logging.LogRecord] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.records.append(record)
 
 
 @pytest.fixture(autouse=True)
@@ -85,3 +95,26 @@ def test_extras_are_redacted_before_emission() -> None:
     record = _format("provider call", error_code="EMBEDDING_FAILED", api_key="sk-live-9999999999")
     assert record["error_code"] == "EMBEDDING_FAILED"
     assert record["api_key"] == "[REDACTED]"
+
+
+def test_telemetry_receives_only_the_redacted_json_record() -> None:
+    delegate = _CaptureHandler()
+    handler = RedactingTelemetryHandler(delegate)
+    record = logging.LogRecord(
+        name="src.services.provider",
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=1,
+        msg="provider failed for postgresql://rescue:hunter2@postgres/rescue",
+        args=(),
+        exc_info=None,
+    )
+    record.api_key = "sk-live-9999999999"
+
+    handler.emit(record)
+
+    assert len(delegate.records) == 1
+    exported = delegate.records[0].getMessage()
+    assert "hunter2" not in exported
+    assert "sk-live-9999999999" not in exported
+    assert exported.count("[REDACTED]") == 2

@@ -1,0 +1,33 @@
+groups:
+  - name: liara-rescue
+    rules:
+      - alert: LiaraRescueApiDown
+        expr: up{job="liara-rescue-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Liara Rescue API is unavailable
+
+      - alert: LiaraRescueHighErrorRate
+        expr: >-
+          sum(rate(liara_http_requests_total{status=~"5.."}[5m]))
+          /
+          clamp_min(sum(rate(liara_http_requests_total[5m])), 0.001)
+          > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: API 5xx rate is above 5 percent
+
+      - alert: LiaraRescueHighP95Latency
+        expr: >-
+          histogram_quantile(0.95,
+            sum by (le) (rate(liara_http_request_duration_seconds_bucket[5m])))
+          > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: API p95 latency is above 5 seconds
