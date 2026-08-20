@@ -55,6 +55,17 @@ def _completion(message: dict[str, Any], *, total_tokens: int = 1) -> ChatComple
     )
 
 
+def _answer(answer: str, *citation_ids: str) -> dict[str, Any]:
+    import json
+
+    return {
+        "role": "assistant",
+        "content": json.dumps(
+            {"answer": answer, "citation_ids": list(citation_ids)}, ensure_ascii=False
+        ),
+    }
+
+
 def _tool_call(query: str, *, call_id: str = "call-1") -> dict[str, Any]:
     return {
         "role": "assistant",
@@ -73,10 +84,19 @@ def _tool_call(query: str, *, call_id: str = "call-1") -> dict[str, Any]:
 
 
 def _registry(calls: list[str]) -> AgentToolRegistry:
-    async def handler(arguments: ToolInput) -> dict[str, str]:
+    async def handler(arguments: ToolInput) -> dict[str, Any]:
         query = getattr(arguments, "query", "")
         calls.append(query)
-        return {"evidence": "مستند"}
+        return {
+            "evidence_id": "chunk:1",
+            "text": "evidence",
+            "citation": {
+                "url": "https://docs.liara.ir/paas/python#deploy",
+                "page_title": "Python deployment",
+                "section_title": "Deploy",
+                "source_commit": "abc123",
+            },
+        }
 
     return AgentToolRegistry(
         {
@@ -104,7 +124,7 @@ async def test_tool_call_limit_forces_a_tool_free_final_step() -> None:
     model = ScriptedModel(
         [
             _completion(_tool_call("سؤال")),
-            _completion({"role": "assistant", "content": "پاسخ از شاهد"}),
+            _completion(_answer("grounded answer", "chunk:1")),
         ]
     )
     executor = RecordingExecutor()
@@ -130,7 +150,7 @@ async def test_rewrite_limit_prevents_the_new_query_from_reaching_a_tool() -> No
     model = ScriptedModel(
         [
             _completion(_tool_call("عبارت بازنویسی شده")),
-            _completion({"role": "assistant", "content": "شاهد کافی نیست"}),
+            _completion(_answer("not enough evidence")),
         ]
     )
 
@@ -147,9 +167,7 @@ async def test_rewrite_limit_prevents_the_new_query_from_reaching_a_tool() -> No
 
 @pytest.mark.asyncio
 async def test_token_budget_terminates_the_turn() -> None:
-    model = ScriptedModel(
-        [_completion({"role": "assistant", "content": "نباید تحویل شود"}, total_tokens=11)]
-    )
+    model = ScriptedModel([_completion(_answer("must not be delivered"), total_tokens=11)])
     executor = RecordingExecutor()
 
     with pytest.raises(RescueError) as caught:

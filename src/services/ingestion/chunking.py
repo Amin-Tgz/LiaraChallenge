@@ -570,7 +570,7 @@ def chunk_document(
     empty page, and the ingestion pipeline must be able to tell those apart.
     """
     settings = settings or get_settings()
-    url = source_url or source_url_for(source_path)
+    url = source_url or source_url_for(source_path, settings.docs_base_url)
     breadcrumb_path, service, runtime, framework = _path_metadata(source_path)
 
     blocks = _split_blocks(document.markdown)

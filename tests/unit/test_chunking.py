@@ -246,6 +246,27 @@ def test_source_url_mapping(path: str, url: str) -> None:
     assert source_url_for(path) == url
 
 
+def test_chunking_uses_the_configured_public_docs_origin() -> None:
+    document = transform_mdx(
+        '# title\n\n<Section id="envs" title="Environment variables" />\n\nSection text.'
+    )
+    settings = Settings(
+        _env_file=None,
+        docs_base_url="https://docs.example.test",
+        chunk_min_tokens=1,
+        chunk_target_tokens=60,
+        chunk_max_tokens=90,
+    )
+
+    chunks = chunk_document(
+        document,
+        source_path="src/pages/paas/django/getting-started.mdx",
+        settings=settings,
+    )
+
+    assert chunks[0].citation_url == ("https://docs.example.test/paas/django/getting-started#envs")
+
+
 def test_path_metadata_separates_runtime_from_framework() -> None:
     django = chunks_for("paas__django__how-tos__create-app.mdx")[0]
     postgres = chunks_for("dbaas__postgresql__how-tos__connect-via-platform__django.mdx")[0]

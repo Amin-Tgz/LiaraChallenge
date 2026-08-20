@@ -3,14 +3,24 @@
 from __future__ import annotations
 
 import json
+import uuid
 from collections.abc import Awaitable, Callable, Mapping
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from sqlalchemy import or_, select
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 
+from src.core.config import Settings, get_settings
 from src.core.errors import ErrorCode, RescueError
+from src.db.models import Document, DocumentChunk, IndexVersion
+from src.services.faq import FaqEmbeddingProvider, match_faqs
+from src.services.retrieval import RetrievalIntent, RetrievalTelemetry, search_documentation
+
+Executor = AsyncSession | AsyncConnection
 
 
 class AgentToolName(StrEnum):
@@ -121,3 +131,184 @@ class AgentToolRegistry:
                 detail=f"invalid arguments for agent tool {tool_name.value}",
             ) from err
         return await self._handlers[tool_name](parsed)
+
+
+def _page_title(metadata: Mapping[str, Any]) -> str | None:
+    breadcrumbs = [str(value) for value in metadata.get("breadcrumbs") or []]
+    section = metadata.get("section_title")
+    if section and breadcrumbs and breadcrumbs[-1] == section:
+        breadcrumbs.pop()
+    return breadcrumbs[-1] if breadcrumbs else None
+
+
+def _chunk_evidence(result: Any) -> dict[str, Any]:
+    return {
+        "evidence_id": f"chunk:{result.chunk_id}",
+        "text": result.text,
+        "similarity": result.similarity,
+        "metadata": result.metadata,
+        "images": result.images,
+        "citation": {
+            "url": result.citation_url,
+            "page_title": _page_title(result.metadata),
+            "section_title": result.metadata.get("section_title"),
+            "source_commit": result.source_commit,
+        },
+    }
+
+
+def _faq_evidence(result: Any) -> dict[str, Any]:
+    return {
+        "evidence_id": f"faq:{result.faq_item_id}",
+        "question": result.question,
+        "text": result.answer,
+        "similarity": result.similarity,
+        "tags": result.tags,
+        "citation": {
+            "url": result.citation_url,
+            "page_title": result.question,
+            "section_title": None,
+            "source_commit": result.source_commit,
+        },
+    }
+
+
+def build_documentation_tool_registry(
+    executor: Executor,
+    embeddings: FaqEmbeddingProvider,
+    *,
+    settings: Settings | None = None,
+    telemetry: RetrievalTelemetry | None = None,
+) -> AgentToolRegistry:
+    """Bind the allowlist to the one shared Liara retrieval core."""
+    settings = settings or get_settings()
+    telemetry = telemetry or RetrievalTelemetry()
+
+    async def search_docs(arguments: ToolInput) -> list[dict[str, Any]]:
+        assert isinstance(arguments, SearchDocsInput)
+        explicit = {
+            key: value
+            for key, value in {
+                "service": arguments.service,
+                "runtime": arguments.runtime,
+                "framework": arguments.framework,
+            }.items()
+            if value
+        }
+        requested = arguments.top_k or settings.retrieval_top_k
+        results = await search_documentation(
+            executor,
+            arguments.query,
+            embeddings,
+            settings=settings,
+            top_k=min(requested, settings.retrieval_top_k),
+            intent=RetrievalIntent(explicit_filters=explicit),
+            telemetry=telemetry,
+        )
+        return [_chunk_evidence(result) for result in results]
+
+    async def read_doc(arguments: ToolInput) -> list[dict[str, Any]]:
+        assert isinstance(arguments, ReadDocInput)
+        identifier = arguments.document_id_or_url.strip()
+        url, _, url_anchor = identifier.partition("#")
+        section = arguments.section or url_anchor or None
+        try:
+            document_id = uuid.UUID(identifier)
+        except ValueError:
+            document_id = None
+
+        try:
+            active_id = (
+                await executor.execute(
+                    select(IndexVersion.id).where(IndexVersion.is_active.is_(True))
+                )
+            ).scalar_one_or_none()
+            if active_id is None:
+                raise RescueError(
+                    ErrorCode.NO_ACTIVE_INDEX,
+                    detail="read_doc requested while no index version is active",
+                )
+            identity = (
+                Document.id == document_id
+                if document_id is not None
+                else Document.source_url == url
+            )
+            section_filter = []
+            if section:
+                section_filter.append(
+                    or_(
+                        DocumentChunk.heading_anchor == section,
+                        DocumentChunk.section_title == section,
+                    )
+                )
+            rows = (
+                await executor.execute(
+                    select(DocumentChunk, Document.title)
+                    .join(Document, Document.id == DocumentChunk.document_id)
+                    .where(
+                        DocumentChunk.index_version_id == active_id,
+                        identity,
+                        *section_filter,
+                    )
+                    .order_by(DocumentChunk.ordinal)
+                    .limit(settings.retrieval_top_k)
+                )
+            ).all()
+        except RescueError:
+            raise
+        except SQLAlchemyError as err:
+            raise RescueError(
+                ErrorCode.RETRIEVAL_FAILED,
+                detail="database failed while reading an indexed document",
+            ) from err
+        if not rows:
+            raise RescueError(
+                ErrorCode.NO_RESULTS_ABOVE_THRESHOLD,
+                detail="active index contains no matching document or section",
+            )
+        return [
+            {
+                "evidence_id": f"chunk:{row.DocumentChunk.id}",
+                "text": row.DocumentChunk.text,
+                "images": list(row.DocumentChunk.images or []),
+                "metadata": {
+                    "source_path": row.DocumentChunk.source_path,
+                    "section_title": row.DocumentChunk.section_title,
+                    "breadcrumbs": list(row.DocumentChunk.breadcrumbs or []),
+                    "service": row.DocumentChunk.service,
+                    "runtime": row.DocumentChunk.runtime,
+                    "framework": row.DocumentChunk.framework,
+                },
+                "citation": {
+                    "url": (
+                        f"{row.DocumentChunk.source_url}#{row.DocumentChunk.heading_anchor}"
+                        if row.DocumentChunk.heading_anchor
+                        else row.DocumentChunk.source_url
+                    ),
+                    "page_title": row.title,
+                    "section_title": row.DocumentChunk.section_title,
+                    "source_commit": row.DocumentChunk.source_commit,
+                },
+            }
+            for row in rows
+        ]
+
+    async def search_related(arguments: ToolInput) -> list[dict[str, Any]]:
+        assert isinstance(arguments, SearchRelatedQuestionsInput)
+        requested = arguments.top_k or settings.faq_top_k
+        results = await match_faqs(
+            executor,
+            arguments.query,
+            embeddings,
+            settings=settings,
+            top_k=min(requested, settings.faq_top_k),
+        )
+        return [_faq_evidence(result) for result in results]
+
+    return AgentToolRegistry(
+        {
+            AgentToolName.SEARCH_DOCS: search_docs,
+            AgentToolName.READ_DOC: read_doc,
+            AgentToolName.SEARCH_RELATED_QUESTIONS: search_related,
+        }
+    )

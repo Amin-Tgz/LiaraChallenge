@@ -12,7 +12,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 
 from src.core.config import Settings, get_settings
-from src.core.errors import ErrorCode, RescueError
+from src.core.errors import ERROR_SPECS, ErrorCode, RescueError
 from src.core.logging import get_logger
 from src.core.normalization import normalize_query
 from src.db.models import UsageEvent
@@ -22,6 +22,24 @@ from src.services.gateway import ChatCompletion, GatewayTelemetry
 
 logger = get_logger(__name__)
 Executor = AsyncSession | AsyncConnection
+
+FINAL_RESPONSE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["answer", "citation_ids"],
+    "properties": {
+        "answer": {"type": "string"},
+        "citation_ids": {"type": "array", "items": {"type": "string"}},
+    },
+}
+FINAL_RESPONSE_FORMAT: dict[str, Any] = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "liara_grounded_answer",
+        "strict": True,
+        "schema": FINAL_RESPONSE_SCHEMA,
+    },
+}
 
 
 class ChatModel(Protocol):
@@ -39,12 +57,22 @@ class ChatModel(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
+class AgentCitation:
+    evidence_id: str
+    url: str
+    page_title: str | None
+    section_title: str | None
+    source_commit: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class AgentTurnResult:
     content: str
     messages: tuple[dict[str, Any], ...]
     tool_calls: int
     rewrites: int
     total_tokens: int
+    citations: tuple[AgentCitation, ...] = ()
     limit_reason: str | None = None
     error_code: ErrorCode | None = None
 
@@ -78,6 +106,27 @@ def _normalized_tool_query(arguments: str) -> str | None:
     if not isinstance(raw, dict) or not isinstance(raw.get("query"), str):
         return None
     return normalize_query(raw["query"])
+
+
+def _collect_evidence(output: Any, evidence: dict[str, AgentCitation]) -> None:
+    items = output if isinstance(output, list) else [output]
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        evidence_id = item.get("evidence_id")
+        citation = item.get("citation")
+        if not isinstance(evidence_id, str) or not isinstance(citation, dict):
+            continue
+        url = citation.get("url")
+        if not isinstance(url, str):
+            continue
+        evidence[evidence_id] = AgentCitation(
+            evidence_id=evidence_id,
+            url=url,
+            page_title=citation.get("page_title"),
+            section_title=citation.get("section_title"),
+            source_commit=citation.get("source_commit"),
+        )
 
 
 class BoundedAgent:
@@ -133,6 +182,127 @@ class BoundedAgent:
                 },
             )
 
+    async def _record_no_evidence(
+        self,
+        executor: Executor,
+        *,
+        telemetry: GatewayTelemetry,
+        evidence_count: int,
+        reason: str,
+    ) -> None:
+        try:
+            await executor.execute(
+                UsageEvent.__table__.insert().values(
+                    event_type=UsageEventType.ERROR.value,
+                    trace_id=telemetry.trace_id,
+                    session_id=telemetry.session_id,
+                    conversation_id=telemetry.conversation_id,
+                    job_id=telemetry.job_id,
+                    index_version_id=telemetry.index_version_id,
+                    error_code=ErrorCode.NO_EVIDENCE.value,
+                    question=telemetry.question,
+                    payload={"evidence_count": evidence_count, "reason": reason},
+                )
+            )
+        except SQLAlchemyError as err:
+            logger.warning(
+                "agent abstention telemetry failed",
+                extra={
+                    "trace_id": telemetry.trace_id,
+                    "error_code": ErrorCode.NO_EVIDENCE.value,
+                    "cause": type(err).__name__,
+                },
+            )
+
+    async def _final_result(
+        self,
+        executor: Executor,
+        *,
+        raw_content: Any,
+        conversation: list[dict[str, Any]],
+        evidence: Mapping[str, AgentCitation],
+        telemetry: GatewayTelemetry,
+        tool_calls: int,
+        rewrites: int,
+        total_tokens: int,
+        limit_reason: str | None = None,
+    ) -> AgentTurnResult:
+        reason: str | None = None
+        try:
+            parsed = json.loads(raw_content) if isinstance(raw_content, str) else None
+        except json.JSONDecodeError:
+            parsed = None
+        if not isinstance(parsed, dict):
+            reason = "invalid_structured_answer"
+            answer = ""
+            citation_ids: list[str] = []
+        else:
+            answer = parsed.get("answer")
+            citation_ids = parsed.get("citation_ids")
+            if not isinstance(answer, str) or not answer.strip():
+                reason = "empty_answer"
+            if not isinstance(citation_ids, list) or not all(
+                isinstance(value, str) for value in citation_ids
+            ):
+                reason = "invalid_citation_ids"
+                citation_ids = []
+
+        citations: list[AgentCitation] = []
+        if reason is None:
+            unknown = [evidence_id for evidence_id in citation_ids if evidence_id not in evidence]
+            if unknown:
+                reason = "citation_not_retrieved"
+            elif not evidence or not citation_ids:
+                reason = "no_retrieved_evidence"
+            else:
+                seen: set[str] = set()
+                for evidence_id in citation_ids:
+                    if evidence_id in seen:
+                        continue
+                    seen.add(evidence_id)
+                    citation = evidence[evidence_id]
+                    public_base = self.settings.docs_base_url.rstrip("/")
+                    if citation.url != public_base and not citation.url.startswith(
+                        f"{public_base}/"
+                    ):
+                        reason = "non_public_citation"
+                        citations = []
+                        break
+                    citations.append(citation)
+
+        if reason is not None:
+            await self._record_no_evidence(
+                executor,
+                telemetry=telemetry,
+                evidence_count=len(evidence),
+                reason=reason,
+            )
+            content = (
+                f"{ERROR_SPECS[ErrorCode.NO_EVIDENCE].message_fa} "
+                "برای ادامه می‌توانید صفحهٔ مرتبط را بررسی کنید یا با پشتیبانی لیارا تماس بگیرید."
+            )
+            return AgentTurnResult(
+                content=content,
+                messages=tuple(conversation),
+                tool_calls=tool_calls,
+                rewrites=rewrites,
+                total_tokens=total_tokens,
+                citations=(),
+                limit_reason=limit_reason,
+                error_code=ErrorCode.NO_EVIDENCE,
+            )
+
+        return AgentTurnResult(
+            content=answer,
+            messages=tuple(conversation),
+            tool_calls=tool_calls,
+            rewrites=rewrites,
+            total_tokens=total_tokens,
+            citations=tuple(citations),
+            limit_reason=limit_reason,
+            error_code=ErrorCode.AGENT_LIMIT_REACHED if limit_reason else None,
+        )
+
     async def _run(
         self,
         executor: Executor,
@@ -147,6 +317,7 @@ class BoundedAgent:
         tool_calls_used = 0
         rewrites_used = 0
         total_tokens = 0
+        evidence: dict[str, AgentCitation] = {}
         query_forms = {normalize_query(question)}
         limit_reason: str | None = None
 
@@ -187,6 +358,7 @@ class BoundedAgent:
                 messages=request_messages,
                 tools=None if force_final else self.tools.definitions,
                 tool_choice=None if force_final else "auto",
+                response_format=FINAL_RESPONSE_FORMAT,
                 telemetry=telemetry,
             )
             total_tokens += completion.total_tokens
@@ -208,12 +380,6 @@ class BoundedAgent:
             assistant_message = dict(completion.message)
             calls = _tool_calls(assistant_message)
             if force_final:
-                content = assistant_message.get("content")
-                if not isinstance(content, str) or not content.strip():
-                    raise RescueError(
-                        ErrorCode.AGENT_LIMIT_REACHED,
-                        detail=f"agent reached {limit_reason} limit without a final answer",
-                    )
                 conversation.append(assistant_message)
                 await self._record_limit(
                     executor,
@@ -224,27 +390,26 @@ class BoundedAgent:
                     rewrites=rewrites_used,
                     total_tokens=total_tokens,
                 )
-                return AgentTurnResult(
-                    content=content,
-                    messages=tuple(conversation),
+                return await self._final_result(
+                    executor,
+                    raw_content=assistant_message.get("content"),
+                    conversation=conversation,
+                    evidence=evidence,
+                    telemetry=telemetry,
                     tool_calls=tool_calls_used,
                     rewrites=rewrites_used,
                     total_tokens=total_tokens,
                     limit_reason=limit_reason,
-                    error_code=ErrorCode.AGENT_LIMIT_REACHED,
                 )
 
             if not calls:
-                content = assistant_message.get("content")
-                if not isinstance(content, str) or not content.strip():
-                    raise RescueError(
-                        ErrorCode.INTERNAL_ERROR,
-                        detail="model returned neither content nor a tool call",
-                    )
                 conversation.append(assistant_message)
-                return AgentTurnResult(
-                    content=content,
-                    messages=tuple(conversation),
+                return await self._final_result(
+                    executor,
+                    raw_content=assistant_message.get("content"),
+                    conversation=conversation,
+                    evidence=evidence,
+                    telemetry=telemetry,
                     tool_calls=tool_calls_used,
                     rewrites=rewrites_used,
                     total_tokens=total_tokens,
@@ -295,6 +460,7 @@ class BoundedAgent:
                     query_forms.add(query)
                     rewrites_used += 1
                 output = await self.tools.execute(name, arguments)
+                _collect_evidence(output, evidence)
                 tool_calls_used += 1
                 conversation.append(
                     {
