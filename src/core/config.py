@@ -85,6 +85,8 @@ class Settings(BaseSettings):
     retrieval_top_k: int = 8
     retrieval_similarity_threshold: float = 0.25
     rrf_k: int = 60
+    rrf_dense_weight: float = 1.0
+    rrf_lexical_weight: float = 1.0
     index_stale_after_days: int = 14
 
     # --- Agent bounds ---
@@ -114,6 +116,20 @@ class Settings(BaseSettings):
         # unindexable and every query degrades to a sequential scan.
         if not 0 < v <= 2000:
             raise ValueError("EMBEDDING_DIMENSIONS must be in (0, 2000] to stay HNSW-indexable")
+        return v
+
+    @field_validator("rrf_k")
+    @classmethod
+    def _positive_rrf_k(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("RRF_K must be positive")
+        return v
+
+    @field_validator("rrf_dense_weight", "rrf_lexical_weight")
+    @classmethod
+    def _non_negative_rrf_weight(cls, v: float) -> float:
+        if v < 0:
+            raise ValueError("RRF weights must be non-negative")
         return v
 
     @property

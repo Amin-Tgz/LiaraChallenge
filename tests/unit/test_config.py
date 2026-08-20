@@ -22,6 +22,21 @@ def test_default_embedding_dimensions_is_1536() -> None:
     assert _settings().embedding_dimensions == 1536
 
 
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"rrf_k": 0}, "RRF_K must be positive"),
+        ({"rrf_dense_weight": -1}, "RRF weights must be non-negative"),
+        ({"rrf_lexical_weight": -1}, "RRF weights must be non-negative"),
+    ],
+)
+def test_rrf_configuration_rejects_invalid_values(
+    overrides: dict[str, object], message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        _settings(**overrides)
+
+
 def test_judge_must_differ_from_the_model_under_test() -> None:
     settings = _settings(llm_model="gemini-3.7-flash", eval_judge_model="gemini-3.7-flash")
     with pytest.raises(ValueError, match="must differ"):

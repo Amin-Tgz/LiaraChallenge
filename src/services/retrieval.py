@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -81,7 +82,81 @@ class ActiveIndex:
     source_commit: str
 
 
+@dataclass(frozen=True, slots=True)
+class FusedRetrievalResult:
+    """RRF output with every contributing rank preserved."""
+
+    chunk_id: uuid.UUID
+    index_version_id: uuid.UUID
+    fusion_score: float
+    dense_rank: int | None
+    lexical_rank: int | None
+    similarity: float | None
+    lexical_score: float | None
+    text: str
+    metadata: dict[str, Any]
+    images: list[dict[str, Any]]
+    source_url: str
+    heading_anchor: str | None
+    source_commit: str
+
+    @property
+    def citation_url(self) -> str:
+        if not self.heading_anchor:
+            return self.source_url
+        return f"{self.source_url}#{self.heading_anchor}"
+
+
 Executor = AsyncSession | AsyncConnection
+
+
+def reciprocal_rank_fusion(
+    dense_results: Sequence[RetrievalResult],
+    lexical_results: Sequence[LexicalRetrievalResult],
+    *,
+    settings: Settings | None = None,
+) -> list[FusedRetrievalResult]:
+    """Fuse heterogeneous rankings without pretending their scores align."""
+    settings = settings or get_settings()
+    dense_by_id = {result.chunk_id: (rank, result) for rank, result in enumerate(dense_results, 1)}
+    lexical_by_id = {
+        result.chunk_id: (rank, result) for rank, result in enumerate(lexical_results, 1)
+    }
+    fused: list[FusedRetrievalResult] = []
+
+    for chunk_id in dense_by_id.keys() | lexical_by_id.keys():
+        dense_entry = dense_by_id.get(chunk_id)
+        lexical_entry = lexical_by_id.get(chunk_id)
+        dense_rank, dense = dense_entry if dense_entry is not None else (None, None)
+        lexical_rank, lexical = lexical_entry if lexical_entry is not None else (None, None)
+        evidence = dense or lexical
+        assert evidence is not None  # the chunk id came from at least one mapping
+
+        fusion_score = 0.0
+        if dense_rank is not None:
+            fusion_score += settings.rrf_dense_weight / (settings.rrf_k + dense_rank)
+        if lexical_rank is not None:
+            fusion_score += settings.rrf_lexical_weight / (settings.rrf_k + lexical_rank)
+
+        fused.append(
+            FusedRetrievalResult(
+                chunk_id=chunk_id,
+                index_version_id=evidence.index_version_id,
+                fusion_score=fusion_score,
+                dense_rank=dense_rank,
+                lexical_rank=lexical_rank,
+                similarity=dense.similarity if dense is not None else None,
+                lexical_score=lexical.lexical_score if lexical is not None else None,
+                text=evidence.text,
+                metadata=evidence.metadata,
+                images=evidence.images,
+                source_url=evidence.source_url,
+                heading_anchor=evidence.heading_anchor,
+                source_commit=evidence.source_commit,
+            )
+        )
+
+    return sorted(fused, key=lambda result: (-result.fusion_score, str(result.chunk_id)))
 
 
 def _dense_statement(query_vector: list[float], top_k: int) -> Select[tuple[Any, ...]]:
@@ -328,3 +403,47 @@ async def lexical_retrieve(
         },
     )
     return results
+
+
+async def hybrid_retrieve(
+    executor: Executor,
+    query: str,
+    embeddings: EmbeddingProvider,
+    *,
+    settings: Settings | None = None,
+    top_k: int | None = None,
+) -> list[FusedRetrievalResult]:
+    """Run dense and lexical retrieval, then return their RRF ordering."""
+    settings = settings or get_settings()
+    limit = top_k if top_k is not None else settings.retrieval_top_k
+    normalized = normalize_query(query)
+    if not normalized:
+        raise RescueError(ErrorCode.INVALID_REQUEST, detail="retrieval query is empty")
+
+    query_vector = await asyncio.to_thread(embeddings.embed_one, normalized)
+    dense = await dense_retrieve_by_vector(
+        executor,
+        query_vector,
+        settings=settings,
+        top_k=limit,
+    )
+    lexical = await lexical_retrieve(
+        executor,
+        normalized,
+        settings=settings,
+        top_k=limit,
+    )
+    fused = reciprocal_rank_fusion(dense, lexical, settings=settings)[:limit]
+    logger.info(
+        "hybrid retrieval fused",
+        extra={
+            "method": "rrf",
+            "dense_count": len(dense),
+            "lexical_count": len(lexical),
+            "result_count": len(fused),
+            "rrf_k": settings.rrf_k,
+            "dense_weight": settings.rrf_dense_weight,
+            "lexical_weight": settings.rrf_lexical_weight,
+        },
+    )
+    return fused

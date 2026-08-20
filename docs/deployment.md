@@ -273,6 +273,8 @@ FAQ_TOP_K=5
 RETRIEVAL_TOP_K=8
 RETRIEVAL_SIMILARITY_THRESHOLD=0.25   # below this is NO_RESULTS_ABOVE_THRESHOLD
 RRF_K=60
+RRF_DENSE_WEIGHT=1.0
+RRF_LEXICAL_WEIGHT=1.0
 INDEX_STALE_AFTER_DAYS=14      # past this, answers carry INDEX_STALE
 
 # --- Agent bounds: enforced in the loop, never merely requested in the prompt ---
