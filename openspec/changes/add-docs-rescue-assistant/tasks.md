@@ -74,7 +74,7 @@
 - [x] 9.3 Implement the bounded agent loop enforcing tool-call, rewrite, token, and timeout limits in code; verify each limit terminates the turn under test
 - [x] 9.4 Implement mandatory citation and abstention on insufficient evidence; verify an unanswerable question abstains with the no-evidence code rather than answering
 - [x] 9.5 Implement clarification triggered only when the missing detail changes the answer; verify an under-specified but answer-invariant question is answered without asking
-- [ ] 9.6 Implement the session technical profile as JSON on the conversation, updated per turn; verify a runtime stated once is reused in a later turn
+- [x] 9.6 Implement the session technical profile as JSON on the conversation, updated per turn; verify a runtime stated once is reused in a later turn
 - [ ] 9.7 Frame retrieved content as data not instruction; verify a prompt-injection fixture in retrieved content does not alter behavior
 
 ## 10. Queue, streaming, durability

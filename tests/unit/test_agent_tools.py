@@ -4,6 +4,7 @@ from typing import Any
 
 import pytest
 
+from src.core.config import Settings
 from src.core.errors import ErrorCode, RescueError
 from src.services.agent_tools import (
     AGENT_TOOL_DEFINITIONS,
@@ -11,6 +12,7 @@ from src.services.agent_tools import (
     AgentToolName,
     AgentToolRegistry,
     ToolInput,
+    build_documentation_tool_registry,
 )
 
 
@@ -94,3 +96,28 @@ async def test_extra_tool_arguments_are_rejected() -> None:
 
     assert caught.value.code is ErrorCode.INVALID_REQUEST
     assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_session_profile_is_reused_as_a_soft_retrieval_hint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen_runtimes: list[str] = []
+
+    async def fake_search(*args: Any, **kwargs: Any) -> list[Any]:
+        seen_runtimes.append(kwargs["intent"].profile_hints["runtime"])
+        return []
+
+    monkeypatch.setattr("src.services.agent_tools.search_documentation", fake_search)
+    registry = build_documentation_tool_registry(
+        object(),  # type: ignore[arg-type]
+        object(),  # type: ignore[arg-type]
+        settings=Settings(_env_file=None),
+        profile={"runtime": "python"},
+    )
+
+    await registry.execute("search_docs", {"query": "deploy"})
+    registry.set_profile({"runtime": "nodejs"})
+    await registry.execute("search_docs", {"query": "deploy"})
+
+    assert seen_runtimes == ["python", "nodejs"]

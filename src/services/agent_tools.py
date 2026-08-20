@@ -53,6 +53,7 @@ class SearchRelatedQuestionsInput(_StrictToolInput):
 
 ToolInput = SearchDocsInput | ReadDocInput | SearchRelatedQuestionsInput
 ToolHandler = Callable[[ToolInput], Awaitable[Any]]
+ProfileUpdater = Callable[[Mapping[str, Any]], None]
 
 _INPUT_MODELS: Mapping[AgentToolName, type[_StrictToolInput]] = MappingProxyType(
     {
@@ -99,7 +100,12 @@ AGENT_TOOL_NAMES: frozenset[str] = frozenset(name.value for name in AgentToolNam
 class AgentToolRegistry:
     """Validates and dispatches only the three documentation capabilities."""
 
-    def __init__(self, handlers: Mapping[AgentToolName, ToolHandler]) -> None:
+    def __init__(
+        self,
+        handlers: Mapping[AgentToolName, ToolHandler],
+        *,
+        profile_updater: ProfileUpdater | None = None,
+    ) -> None:
         expected = frozenset(AgentToolName)
         provided = frozenset(handlers)
         if provided != expected:
@@ -107,10 +113,15 @@ class AgentToolRegistry:
             extra = sorted(str(name) for name in provided - expected)
             raise ValueError(f"agent tool registry mismatch; missing={missing}, extra={extra}")
         self._handlers = MappingProxyType(dict(handlers))
+        self._profile_updater = profile_updater
 
     @property
     def definitions(self) -> tuple[dict[str, Any], ...]:
         return AGENT_TOOL_DEFINITIONS
+
+    def set_profile(self, profile: Mapping[str, Any]) -> None:
+        if self._profile_updater is not None:
+            self._profile_updater(profile)
 
     async def execute(self, name: str, arguments: str | Mapping[str, Any]) -> Any:
         """Reject an unlisted name before considering its arguments or a handler."""
@@ -179,10 +190,12 @@ def build_documentation_tool_registry(
     *,
     settings: Settings | None = None,
     telemetry: RetrievalTelemetry | None = None,
+    profile: Mapping[str, Any] | None = None,
 ) -> AgentToolRegistry:
     """Bind the allowlist to the one shared Liara retrieval core."""
     settings = settings or get_settings()
     telemetry = telemetry or RetrievalTelemetry()
+    profile_context = dict(profile or {})
 
     async def search_docs(arguments: ToolInput) -> list[dict[str, Any]]:
         assert isinstance(arguments, SearchDocsInput)
@@ -202,7 +215,14 @@ def build_documentation_tool_registry(
             embeddings,
             settings=settings,
             top_k=min(requested, settings.retrieval_top_k),
-            intent=RetrievalIntent(explicit_filters=explicit),
+            intent=RetrievalIntent(
+                profile_hints={
+                    key: str(profile_context[key])
+                    for key in ("service", "runtime", "framework")
+                    if profile_context.get(key)
+                },
+                explicit_filters=explicit,
+            ),
             telemetry=telemetry,
         )
         return [_chunk_evidence(result) for result in results]
@@ -305,10 +325,15 @@ def build_documentation_tool_registry(
         )
         return [_faq_evidence(result) for result in results]
 
+    def update_profile(updated: Mapping[str, Any]) -> None:
+        profile_context.clear()
+        profile_context.update(updated)
+
     return AgentToolRegistry(
         {
             AgentToolName.SEARCH_DOCS: search_docs,
             AgentToolName.READ_DOC: read_doc,
             AgentToolName.SEARCH_RELATED_QUESTIONS: search_related,
-        }
+        },
+        profile_updater=update_profile,
     )
