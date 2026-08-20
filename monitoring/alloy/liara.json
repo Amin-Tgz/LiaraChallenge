@@ -1,0 +1,5 @@
+{
+  "app": "liara-rescue-alloy",
+  "platform": "docker",
+  "port": 12345
+}

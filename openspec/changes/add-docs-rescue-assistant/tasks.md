@@ -79,13 +79,13 @@
 
 ## 10. Queue, streaming, durability
 
-- [ ] 10.1 Implement job persistence before enqueue with the state machine queued → retrieving → generating → retrying → completed/failed; verify transitions are recorded
-- [ ] 10.2 Implement Redis queue and worker consumption with bounded retries and a terminal failed state; verify exhausted retries stop rather than loop
-- [ ] 10.3 Implement the Redis Streams token relay from worker to API; verify tokens produced in the worker reach an SSE client
-- [ ] 10.4 Implement SSE streaming with reconnection from last delivered offset; verify a client reconnecting mid-stream receives missed content and continues
-- [ ] 10.5 Verify idempotency: resubmitting the same key creates no second job and both submissions observe the same result
-- [ ] 10.6 Verify durability: killing the worker mid-generation resumes or safely retries without losing the question
-- [ ] 10.7 Implement graceful shutdown draining in-flight jobs and closing SSE cleanly; verify clients reconnect rather than hang
+- [x] 10.1 Implement job persistence before enqueue with the state machine queued → retrieving → generating → retrying → completed/failed; verify transitions are recorded
+- [x] 10.2 Implement Redis queue and worker consumption with bounded retries and a terminal failed state; verify exhausted retries stop rather than loop
+- [x] 10.3 Implement the Redis Streams token relay from worker to API; verify tokens produced in the worker reach an SSE client
+- [x] 10.4 Implement SSE streaming with reconnection from last delivered offset; verify a client reconnecting mid-stream receives missed content and continues
+- [x] 10.5 Verify idempotency: resubmitting the same key creates no second job and both submissions observe the same result
+- [x] 10.6 Verify durability: killing the worker mid-generation resumes or safely retries without losing the question
+- [x] 10.7 Implement graceful shutdown draining in-flight jobs and closing SSE cleanly; verify clients reconnect rather than hang
 
 ## 11. Rescue flow frontend
 

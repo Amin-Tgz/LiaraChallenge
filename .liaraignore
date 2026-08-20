@@ -1,0 +1,24 @@
+# Never ship secrets or local state in the deploy bundle.
+.env
+.env.*
+!.env.example
+
+# Local tooling and caches
+.git
+.venv
+venv
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.cache
+node_modules
+tmp
+secrets
+
+# Build/test artifacts not needed at runtime
+tests
+htmlcov
+.coverage
+*.log

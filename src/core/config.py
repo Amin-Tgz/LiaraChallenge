@@ -103,6 +103,31 @@ class Settings(BaseSettings):
     max_question_chars: int = 2000
     max_history_turns: int = 20
 
+    # --- Queue, streaming, durability ---
+    #: How many times a job may be attempted before it reaches the terminal
+    #: failed state. Bounded in code so exhausted retries stop rather than loop.
+    job_max_attempts: int = 3
+    #: How long the worker blocks waiting for a job before re-checking its stop
+    #: flag. Bounds shutdown latency, nothing else.
+    job_queue_block_seconds: float = 2.0
+    #: Lease held by the worker processing a job, refreshed while it works. If
+    #: the worker dies the lease expires and the job is reclaimed, so a killed
+    #: worker loses no question.
+    job_lease_seconds: float = 90.0
+    #: How long a completed job's relay stream is retained for reconnecting
+    #: clients. Long enough to survive a reload, short enough to bound memory.
+    job_stream_ttl_seconds: int = 3600
+    #: Size of each chunk pushed onto the relay stream. Delivery granularity
+    #: only; it has no effect on what the model produces.
+    job_stream_chunk_chars: int = 24
+    #: Idle interval between SSE keepalive comments, so proxies do not close a
+    #: quiet connection mid-generation.
+    sse_keepalive_seconds: float = 15.0
+    #: Lifetime of the anonymous session cookie that links a browser to its
+    #: prior conversations.
+    session_cookie_max_age_seconds: int = 60 * 60 * 24 * 30
+    session_cookie_name: str = "rescue_session"
+
     # --- Rate limiting ---
     rate_limit_per_ip_per_minute: int = 30
     rate_limit_per_session_per_minute: int = 15
@@ -156,6 +181,31 @@ class Settings(BaseSettings):
     def _non_negative_agent_count(cls, v: int) -> int:
         if v < 0:
             raise ValueError("agent call and rewrite limits must be non-negative")
+        return v
+
+    @field_validator("job_max_attempts")
+    @classmethod
+    def _at_least_one_attempt(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("JOB_MAX_ATTEMPTS must allow at least one attempt")
+        return v
+
+    @field_validator(
+        "job_queue_block_seconds",
+        "job_lease_seconds",
+        "sse_keepalive_seconds",
+    )
+    @classmethod
+    def _positive_interval(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError("queue, lease, and keepalive intervals must be positive")
+        return v
+
+    @field_validator("job_stream_ttl_seconds", "job_stream_chunk_chars")
+    @classmethod
+    def _positive_stream_bound(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("stream retention and chunk size must be positive")
         return v
 
     @field_validator("agent_token_budget", "agent_timeout_seconds")

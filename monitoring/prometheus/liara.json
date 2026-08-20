@@ -1,0 +1,11 @@
+{
+  "app": "liara-rescue-prometheus",
+  "platform": "docker",
+  "port": 9090,
+  "disks": [
+    {
+      "name": "prometheus-data",
+      "mountTo": "/prometheus"
+    }
+  ]
+}

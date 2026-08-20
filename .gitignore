@@ -25,3 +25,6 @@ tmp/
 playwright-report/
 test-results/
 graphify-out/
+
+# Locally generated operational credentials
+secrets/

@@ -29,6 +29,43 @@ IN_FLIGHT = Gauge(
 )
 
 
+# --- Answering jobs -------------------------------------------------------
+# Queue and worker health are what a load test actually needs to see: latency
+# alone cannot distinguish "the model is slow" from "work is piling up".
+
+JOB_OUTCOMES = Counter(
+    "liara_jobs_total",
+    "Answering jobs that reached a terminal state.",
+    ("service", "outcome", "error_code"),
+)
+JOB_DURATION = Histogram(
+    "liara_job_duration_seconds",
+    "Wall-clock time from job pickup to terminal state.",
+    ("service",),
+    buckets=(0.1, 0.25, 0.5, 1, 2.5, 5, 10, 20, 30, 45, 60, 120),
+)
+JOB_ATTEMPTS = Counter(
+    "liara_job_attempts_total",
+    "Job attempts started, including retries.",
+    ("service",),
+)
+QUEUE_DEPTH = Gauge(
+    "liara_job_queue_depth",
+    "Jobs waiting in the Redis queue.",
+    ("service",),
+)
+JOBS_IN_FLIGHT = Gauge(
+    "liara_jobs_in_flight",
+    "Jobs currently being processed by this worker.",
+    ("service",),
+)
+SSE_CLIENTS = Gauge(
+    "liara_sse_clients",
+    "Open server-sent-event connections.",
+    ("service",),
+)
+
+
 def prometheus_response() -> Response:
     """Return the current registry in Prometheus exposition format."""
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)

@@ -11,5 +11,14 @@
     "timeout": 3000,
     "retries": 10,
     "startPeriod": 3000
-  }
+  },
+  "app": "liara-rescue-loki",
+  "platform": "docker",
+  "port": 3100,
+  "disks": [
+    {
+      "name": "loki-data",
+      "mountTo": "/loki"
+    }
+  ]
 }

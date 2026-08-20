@@ -26,6 +26,14 @@ schema_config:
 
 limits_config:
   allow_structured_metadata: true
+  # The compactor initializes a delete-request store whenever deletion is
+  # enabled for a tenant. Loki's default deletion_mode is delete-enabled, so
+  # retention_enabled: false alone is not sufficient: the compactor still tries
+  # to open the delete store on the Liara persistent disk and times out
+  # ("init compactor: failed to init delete store: timeout"), which aborts
+  # startup. Deletion is not a requirement for this deployment, so turn it off
+  # explicitly and the compactor skips the delete store entirely.
+  deletion_mode: disabled
 
 compactor:
   working_directory: /loki/compactor

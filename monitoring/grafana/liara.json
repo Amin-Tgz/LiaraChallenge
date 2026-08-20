@@ -1,0 +1,11 @@
+{
+  "app": "liara-rescue-grafana",
+  "platform": "docker",
+  "port": 3000,
+  "disks": [
+    {
+      "name": "grafana-data",
+      "mountTo": "/var/lib/grafana"
+    }
+  ]
+}
