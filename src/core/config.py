@@ -85,6 +85,7 @@ class Settings(BaseSettings):
     # --- Retrieval ---
     faq_similarity_threshold: float = 0.4
     faq_top_k: int = 5
+    faq_priority_weight: float = 0.01
     retrieval_top_k: int = 8
     retrieval_similarity_threshold: float = 0.25
     rrf_k: int = 60
@@ -133,11 +134,12 @@ class Settings(BaseSettings):
         "rrf_dense_weight",
         "rrf_lexical_weight",
         "retrieval_metadata_boost_weight",
+        "faq_priority_weight",
     )
     @classmethod
     def _non_negative_rrf_weight(cls, v: float) -> float:
         if v < 0:
-            raise ValueError("RRF weights must be non-negative")
+            raise ValueError("ranking weights must be non-negative")
         return v
 
     @field_validator("faq_similarity_threshold", "retrieval_similarity_threshold")

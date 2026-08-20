@@ -273,6 +273,7 @@ INDEX_RETENTION_COUNT=2        # superseded versions kept; at least 1 or rollbac
 # --- Retrieval ---
 FAQ_SIMILARITY_THRESHOLD=0.4   # cosine SIMILARITY, not pgvector distance
 FAQ_TOP_K=5
+FAQ_PRIORITY_WEIGHT=0.01       # ordering only: similarity + priority * weight; never changes exposed similarity
 RETRIEVAL_TOP_K=8
 RETRIEVAL_SIMILARITY_THRESHOLD=0.25   # below this is NO_RESULTS_ABOVE_THRESHOLD
 RRF_K=60

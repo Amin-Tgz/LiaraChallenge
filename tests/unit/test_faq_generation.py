@@ -5,7 +5,7 @@ import json
 import httpx
 
 from src.core.config import Settings
-from src.services.faq import GatewayFaqGenerator, parse_generated_faqs
+from src.services.faq import GatewayFaqGenerator, combined_faq_score, parse_generated_faqs
 
 
 def test_malformed_entries_are_rejected_without_losing_valid_siblings() -> None:
@@ -64,3 +64,12 @@ def test_gateway_requests_strict_schema_with_low_reasoning_effort() -> None:
     assert captured["reasoning_effort"] == "low"
     assert captured["response_format"]["type"] == "json_schema"
     assert captured["response_format"]["json_schema"]["strict"] is True
+
+
+def test_curated_priority_changes_ordering_without_changing_similarity() -> None:
+    similarity = 0.73
+
+    score = combined_faq_score(similarity, priority=4, priority_weight=0.01)
+
+    assert score == 0.77
+    assert similarity == 0.73
