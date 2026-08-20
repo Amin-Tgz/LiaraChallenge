@@ -117,11 +117,10 @@ async def test_similarity_search_uses_the_hnsw_index(migrated: AsyncConnection) 
         rows,
     )
     await conn.execute(text("ANALYZE document_chunks"))
-    # This test database may also hold the real active corpus. Its btree filter
-    # can be cheaper for this synthetic index version than traversing the
-    # global HNSW index, even though the HNSW index itself is healthy. Disable
-    # the competing scan plans locally so this assertion tests index usability
-    # rather than the planner's cost estimate for fixture-only data.
+    # This assertion isolates HNSW usability. Active-index scoping is exercised
+    # by the retrieval integration test; including its btree predicate here can
+    # legitimately make a btree scan plus sort cheaper for this one synthetic
+    # version, which says nothing about whether the HNSW index is valid.
     await conn.execute(text("SET LOCAL enable_seqscan = off"))
     await conn.execute(text("SET LOCAL enable_bitmapscan = off"))
 
@@ -131,10 +130,10 @@ async def test_similarity_search_uses_the_hnsw_index(migrated: AsyncConnection) 
             text(
                 "EXPLAIN (FORMAT JSON) "
                 "SELECT id, 1 - (embedding <=> CAST(:q AS vector)) AS similarity "
-                "FROM document_chunks WHERE index_version_id = :iv "
+                "FROM document_chunks "
                 "ORDER BY embedding <=> CAST(:q AS vector) LIMIT :k"
             ),
-            {"q": query_vector, "iv": index_version_id, "k": get_settings().retrieval_top_k},
+            {"q": query_vector, "k": get_settings().retrieval_top_k},
         )
     ).scalar()
 

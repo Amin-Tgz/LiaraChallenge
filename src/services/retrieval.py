@@ -14,7 +14,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 
@@ -40,6 +40,27 @@ class RetrievalResult:
     chunk_id: uuid.UUID
     index_version_id: uuid.UUID
     similarity: float
+    text: str
+    metadata: dict[str, Any]
+    images: list[dict[str, Any]]
+    source_url: str
+    heading_anchor: str | None
+    source_commit: str
+
+    @property
+    def citation_url(self) -> str:
+        if not self.heading_anchor:
+            return self.source_url
+        return f"{self.source_url}#{self.heading_anchor}"
+
+
+@dataclass(frozen=True, slots=True)
+class LexicalRetrievalResult:
+    """A literal-match candidate; its rank is not cosine similarity."""
+
+    chunk_id: uuid.UUID
+    index_version_id: uuid.UUID
+    lexical_score: float
     text: str
     metadata: dict[str, Any]
     images: list[dict[str, Any]]
@@ -208,3 +229,102 @@ async def dense_retrieve(
         settings=settings,
         top_k=top_k,
     )
+
+
+async def lexical_retrieve(
+    executor: Executor,
+    query: str,
+    *,
+    settings: Settings | None = None,
+    top_k: int | None = None,
+) -> list[LexicalRetrievalResult]:
+    """Find exact terms in normalized text through the generated tsvector."""
+    settings = settings or get_settings()
+    limit = top_k if top_k is not None else settings.retrieval_top_k
+    if limit <= 0:
+        raise RescueError(ErrorCode.INVALID_REQUEST, detail="retrieval top_k must be positive")
+    normalized = normalize_query(query)
+    if not normalized:
+        raise RescueError(ErrorCode.INVALID_REQUEST, detail="retrieval query is empty")
+
+    tsquery = func.websearch_to_tsquery("simple", normalized)
+    lexical_score = func.ts_rank_cd(DocumentChunk.search_vector, tsquery).label("lexical_score")
+    statement = (
+        select(
+            DocumentChunk.id,
+            DocumentChunk.index_version_id,
+            lexical_score,
+            DocumentChunk.text,
+            DocumentChunk.source_url,
+            DocumentChunk.source_path,
+            DocumentChunk.source_commit,
+            DocumentChunk.heading_anchor,
+            DocumentChunk.section_title,
+            DocumentChunk.breadcrumbs,
+            DocumentChunk.content_type,
+            DocumentChunk.code_languages,
+            DocumentChunk.service,
+            DocumentChunk.runtime,
+            DocumentChunk.framework,
+            DocumentChunk.language,
+            DocumentChunk.images,
+            DocumentChunk.extra_metadata,
+        )
+        .join(IndexVersion, IndexVersion.id == DocumentChunk.index_version_id)
+        .where(
+            IndexVersion.is_active.is_(True),
+            DocumentChunk.search_vector.op("@@")(tsquery),
+        )
+        .order_by(lexical_score.desc(), DocumentChunk.id)
+        .limit(limit)
+    )
+
+    started = time.perf_counter()
+    try:
+        active = await _require_active_index(executor)
+        rows = (await executor.execute(statement)).all()
+    except RescueError:
+        raise
+    except SQLAlchemyError as err:
+        raise RescueError(
+            ErrorCode.RETRIEVAL_FAILED,
+            detail="Postgres failed while executing lexical retrieval",
+        ) from err
+
+    results = [
+        LexicalRetrievalResult(
+            chunk_id=row.id,
+            index_version_id=row.index_version_id,
+            lexical_score=float(row.lexical_score),
+            text=row.text,
+            metadata={
+                "source_path": row.source_path,
+                "section_title": row.section_title,
+                "breadcrumbs": list(row.breadcrumbs or []),
+                "content_type": row.content_type,
+                "code_languages": list(row.code_languages or []),
+                "service": row.service,
+                "runtime": row.runtime,
+                "framework": row.framework,
+                "language": row.language,
+                **dict(row.extra_metadata or {}),
+            },
+            images=list(row.images or []),
+            source_url=row.source_url,
+            heading_anchor=row.heading_anchor,
+            source_commit=row.source_commit,
+        )
+        for row in rows
+    ]
+    logger.info(
+        "lexical retrieval completed",
+        extra={
+            "method": "lexical",
+            "index_version": str(active.id),
+            "source_commit": active.source_commit,
+            "result_count": len(results),
+            "top_lexical_score": results[0].lexical_score if results else None,
+            "latency_ms": int((time.perf_counter() - started) * 1000),
+        },
+    )
+    return results
