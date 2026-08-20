@@ -132,6 +132,13 @@ class Settings(BaseSettings):
             raise ValueError("RRF weights must be non-negative")
         return v
 
+    @field_validator("faq_similarity_threshold", "retrieval_similarity_threshold")
+    @classmethod
+    def _cosine_similarity_range(cls, v: float) -> float:
+        if not -1.0 <= v <= 1.0:
+            raise ValueError("cosine similarity thresholds must be in [-1, 1]")
+        return v
+
     @property
     def ingest_section_list(self) -> list[str]:
         raw = self.ingest_sections.strip()

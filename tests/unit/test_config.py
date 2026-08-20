@@ -28,6 +28,8 @@ def test_default_embedding_dimensions_is_1536() -> None:
         ({"rrf_k": 0}, "RRF_K must be positive"),
         ({"rrf_dense_weight": -1}, "RRF weights must be non-negative"),
         ({"rrf_lexical_weight": -1}, "RRF weights must be non-negative"),
+        ({"retrieval_similarity_threshold": 1.1}, "cosine similarity thresholds"),
+        ({"faq_similarity_threshold": -1.1}, "cosine similarity thresholds"),
     ],
 )
 def test_rrf_configuration_rejects_invalid_values(

@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 
 from src.core.config import get_settings
 from src.db.models import DocumentChunk, IndexVersion
-from src.services.retrieval import dense_retrieve
+from src.services.retrieval import dense_retrieve, hybrid_retrieve
 
 pytestmark = pytest.mark.asyncio
 
@@ -85,3 +85,33 @@ async def test_dense_retrieval_is_active_scoped_and_returns_complete_evidence(
         "language",
     } <= result.metadata.keys()
     assert isinstance(result.images, list)
+
+
+async def test_hybrid_results_expose_similarity_not_distance(
+    migrated: AsyncConnection,
+) -> None:
+    active_id = (
+        await migrated.execute(select(IndexVersion.id).where(IndexVersion.is_active.is_(True)))
+    ).scalar_one_or_none()
+    if active_id is None:
+        pytest.skip("full ingestion has not activated an index")
+    vector = (
+        await migrated.execute(
+            select(DocumentChunk.embedding)
+            .where(
+                DocumentChunk.index_version_id == active_id,
+                DocumentChunk.embedding.is_not(None),
+            )
+            .limit(1)
+        )
+    ).scalar_one()
+
+    results = await hybrid_retrieve(
+        migrated,
+        "liara deploy",
+        StubEmbeddings(vector=list(vector)),
+    )
+
+    assert results
+    assert all(isinstance(result.similarity, float) for result in results)
+    assert all(not hasattr(result, "distance") for result in results)

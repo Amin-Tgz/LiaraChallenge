@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import asdict
 
 import pytest
 
@@ -49,8 +50,21 @@ def test_rrf_order_and_contributing_ranks_are_recoverable() -> None:
     lexical = [_lexical("b", 0.5), _lexical("lexical-only", 0.4), _lexical("a", 0.3)]
     settings = Settings(_env_file=None, rrf_k=60)
 
-    first = reciprocal_rank_fusion(dense, lexical, settings=settings)
-    second = reciprocal_rank_fusion(dense, lexical, settings=settings)
+    lexical_similarities = {
+        uuid.uuid5(uuid.NAMESPACE_URL, "lexical-only"): 0.6,
+    }
+    first = reciprocal_rank_fusion(
+        dense,
+        lexical,
+        settings=settings,
+        lexical_similarities=lexical_similarities,
+    )
+    second = reciprocal_rank_fusion(
+        dense,
+        lexical,
+        settings=settings,
+        lexical_similarities=lexical_similarities,
+    )
 
     assert [result.chunk_id for result in first] == [result.chunk_id for result in second]
     assert [result.text for result in first[:2]] == ["b", "a"]
@@ -60,6 +74,9 @@ def test_rrf_order_and_contributing_ranks_are_recoverable() -> None:
     assert by_text["dense-only"].lexical_rank is None
     assert by_text["lexical-only"].dense_rank is None
     assert by_text["b"].fusion_score == pytest.approx(1 / 62 + 1 / 61)
+    payload = asdict(by_text["lexical-only"])
+    assert payload["similarity"] == pytest.approx(0.6)
+    assert not any("distance" in key for key in payload)
 
 
 def test_rrf_weights_are_applied_from_configuration() -> None:
@@ -72,6 +89,11 @@ def test_rrf_weights_are_applied_from_configuration() -> None:
         rrf_lexical_weight=2.0,
     )
 
-    results = reciprocal_rank_fusion(dense, lexical, settings=settings)
+    results = reciprocal_rank_fusion(
+        dense,
+        lexical,
+        settings=settings,
+        lexical_similarities={uuid.uuid5(uuid.NAMESPACE_URL, "lexical-first"): 0.4},
+    )
 
     assert [result.text for result in results] == ["lexical-first", "dense-first"]

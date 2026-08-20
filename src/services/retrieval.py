@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -91,7 +91,7 @@ class FusedRetrievalResult:
     fusion_score: float
     dense_rank: int | None
     lexical_rank: int | None
-    similarity: float | None
+    similarity: float
     lexical_score: float | None
     text: str
     metadata: dict[str, Any]
@@ -115,6 +115,7 @@ def reciprocal_rank_fusion(
     lexical_results: Sequence[LexicalRetrievalResult],
     *,
     settings: Settings | None = None,
+    lexical_similarities: Mapping[uuid.UUID, float] | None = None,
 ) -> list[FusedRetrievalResult]:
     """Fuse heterogeneous rankings without pretending their scores align."""
     settings = settings or get_settings()
@@ -131,6 +132,12 @@ def reciprocal_rank_fusion(
         lexical_rank, lexical = lexical_entry if lexical_entry is not None else (None, None)
         evidence = dense or lexical
         assert evidence is not None  # the chunk id came from at least one mapping
+        if dense is not None:
+            similarity = dense.similarity
+        elif lexical_similarities is not None and chunk_id in lexical_similarities:
+            similarity = lexical_similarities[chunk_id]
+        else:
+            raise ValueError("cosine similarity is required for every lexical-only fused candidate")
 
         fusion_score = 0.0
         if dense_rank is not None:
@@ -145,7 +152,7 @@ def reciprocal_rank_fusion(
                 fusion_score=fusion_score,
                 dense_rank=dense_rank,
                 lexical_rank=lexical_rank,
-                similarity=dense.similarity if dense is not None else None,
+                similarity=similarity,
                 lexical_score=lexical.lexical_score if lexical is not None else None,
                 text=evidence.text,
                 metadata=evidence.metadata,
@@ -306,6 +313,34 @@ async def dense_retrieve(
     )
 
 
+async def _similarities_for_chunks(
+    executor: Executor,
+    query_vector: list[float],
+    chunk_ids: Sequence[uuid.UUID],
+) -> dict[uuid.UUID, float]:
+    if not chunk_ids:
+        return {}
+    internal_distance = DocumentChunk.embedding.cosine_distance(query_vector)
+    similarity = (1 - internal_distance).label("similarity")
+    statement = (
+        select(DocumentChunk.id, similarity)
+        .join(IndexVersion, IndexVersion.id == DocumentChunk.index_version_id)
+        .where(
+            IndexVersion.is_active.is_(True),
+            DocumentChunk.id.in_(chunk_ids),
+            DocumentChunk.embedding.is_not(None),
+        )
+    )
+    try:
+        rows = (await executor.execute(statement)).all()
+    except SQLAlchemyError as err:
+        raise RescueError(
+            ErrorCode.RETRIEVAL_FAILED,
+            detail="Postgres failed while calculating candidate similarities",
+        ) from err
+    return {row.id: float(row.similarity) for row in rows}
+
+
 async def lexical_retrieve(
     executor: Executor,
     query: str,
@@ -433,7 +468,19 @@ async def hybrid_retrieve(
         settings=settings,
         top_k=limit,
     )
-    fused = reciprocal_rank_fusion(dense, lexical, settings=settings)[:limit]
+    dense_ids = {result.chunk_id for result in dense}
+    lexical_only_ids = [result.chunk_id for result in lexical if result.chunk_id not in dense_ids]
+    lexical_similarities = await _similarities_for_chunks(
+        executor,
+        query_vector,
+        lexical_only_ids,
+    )
+    fused = reciprocal_rank_fusion(
+        dense,
+        lexical,
+        settings=settings,
+        lexical_similarities=lexical_similarities,
+    )[:limit]
     logger.info(
         "hybrid retrieval fused",
         extra={
@@ -441,6 +488,7 @@ async def hybrid_retrieve(
             "dense_count": len(dense),
             "lexical_count": len(lexical),
             "result_count": len(fused),
+            "top_similarity": fused[0].similarity if fused else None,
             "rrf_k": settings.rrf_k,
             "dense_weight": settings.rrf_dense_weight,
             "lexical_weight": settings.rrf_lexical_weight,
