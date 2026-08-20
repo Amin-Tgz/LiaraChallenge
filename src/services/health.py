@@ -102,9 +102,11 @@ async def _check_gateway() -> dict[str, Any]:
     settings = get_settings()
     base = settings.portkey_base_url.rstrip("/")
     async with httpx.AsyncClient(timeout=_CHECK_TIMEOUT_SECONDS) as client:
-        response = await client.get(f"{base}/health")
-    if response.status_code >= 500:
-        raise RuntimeError(f"gateway returned {response.status_code}")
+        # The gateway's liveness signal is the root path — it has no /health,
+        # and treating that 404 as success would mask a misconfigured URL.
+        response = await client.get(f"{base}/")
+    if response.status_code >= 400:
+        raise CheckFailed("bad_status", detail=f"gateway returned {response.status_code}")
     return {"provider": "avalai"}
 
 

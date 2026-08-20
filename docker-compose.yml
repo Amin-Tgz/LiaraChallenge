@@ -41,7 +41,8 @@ services:
     ports:
       - "8787:8787"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8787/health || exit 1"]
+      # The gateway serves its liveness signal at the root; /health is a 404 there.
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8787/ >/dev/null || exit 1"]
       interval: 10s
       timeout: 3s
       retries: 10
