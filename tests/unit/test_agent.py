@@ -61,7 +61,14 @@ def _answer(answer: str, *citation_ids: str) -> dict[str, Any]:
     return {
         "role": "assistant",
         "content": json.dumps(
-            {"answer": answer, "citation_ids": list(citation_ids)}, ensure_ascii=False
+            {
+                "response_type": "answer",
+                "answer": answer,
+                "citation_ids": list(citation_ids),
+                "clarification_question": None,
+                "required_field": None,
+            },
+            ensure_ascii=False,
         ),
     }
 

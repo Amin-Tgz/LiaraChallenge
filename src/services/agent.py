@@ -26,10 +26,22 @@ Executor = AsyncSession | AsyncConnection
 FINAL_RESPONSE_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["answer", "citation_ids"],
+    "required": [
+        "response_type",
+        "answer",
+        "citation_ids",
+        "clarification_question",
+        "required_field",
+    ],
     "properties": {
-        "answer": {"type": "string"},
+        "response_type": {"type": "string", "enum": ["answer", "clarification"]},
+        "answer": {"type": ["string", "null"]},
         "citation_ids": {"type": "array", "items": {"type": "string"}},
+        "clarification_question": {"type": ["string", "null"]},
+        "required_field": {
+            "type": ["string", "null"],
+            "enum": ["service", "runtime", "framework", "deployment_mode", None],
+        },
     },
 }
 FINAL_RESPONSE_FORMAT: dict[str, Any] = {
@@ -73,6 +85,8 @@ class AgentTurnResult:
     rewrites: int
     total_tokens: int
     citations: tuple[AgentCitation, ...] = ()
+    needs_clarification: bool = False
+    clarification_field: str | None = None
     limit_reason: str | None = None
     error_code: ErrorCode | None = None
 
@@ -108,7 +122,11 @@ def _normalized_tool_query(arguments: str) -> str | None:
     return normalize_query(raw["query"])
 
 
-def _collect_evidence(output: Any, evidence: dict[str, AgentCitation]) -> None:
+def _collect_evidence(
+    output: Any,
+    evidence: dict[str, AgentCitation],
+    evidence_metadata: dict[str, dict[str, Any]],
+) -> None:
     items = output if isinstance(output, list) else [output]
     for item in items:
         if not isinstance(item, dict):
@@ -127,6 +145,34 @@ def _collect_evidence(output: Any, evidence: dict[str, AgentCitation]) -> None:
             section_title=citation.get("section_title"),
             source_commit=citation.get("source_commit"),
         )
+        metadata = item.get("metadata")
+        evidence_metadata[evidence_id] = dict(metadata) if isinstance(metadata, dict) else {}
+
+
+def _clarification_parts(raw_content: Any) -> tuple[str, str] | None:
+    try:
+        parsed = json.loads(raw_content) if isinstance(raw_content, str) else None
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(parsed, dict) or parsed.get("response_type") != "clarification":
+        return None
+    question = parsed.get("clarification_question")
+    field = parsed.get("required_field")
+    if not isinstance(question, str) or not question.strip() or not isinstance(field, str):
+        return None
+    return question, field
+
+
+def _clarification_is_load_bearing(
+    field: str,
+    evidence_metadata: Mapping[str, Mapping[str, Any]],
+) -> bool:
+    alternatives = {
+        normalize_query(str(metadata[field]))
+        for metadata in evidence_metadata.values()
+        if metadata.get(field)
+    }
+    return len(alternatives) >= 2
 
 
 class BoundedAgent:
@@ -221,11 +267,13 @@ class BoundedAgent:
         raw_content: Any,
         conversation: list[dict[str, Any]],
         evidence: Mapping[str, AgentCitation],
+        evidence_metadata: Mapping[str, Mapping[str, Any]],
         telemetry: GatewayTelemetry,
         tool_calls: int,
         rewrites: int,
         total_tokens: int,
         limit_reason: str | None = None,
+        allow_clarification: bool = True,
     ) -> AgentTurnResult:
         reason: str | None = None
         try:
@@ -236,7 +284,30 @@ class BoundedAgent:
             reason = "invalid_structured_answer"
             answer = ""
             citation_ids: list[str] = []
+        elif parsed.get("response_type") == "clarification":
+            clarification = _clarification_parts(raw_content)
+            if (
+                allow_clarification
+                and clarification is not None
+                and _clarification_is_load_bearing(clarification[1], evidence_metadata)
+            ):
+                return AgentTurnResult(
+                    content=clarification[0],
+                    messages=tuple(conversation),
+                    tool_calls=tool_calls,
+                    rewrites=rewrites,
+                    total_tokens=total_tokens,
+                    citations=(),
+                    needs_clarification=True,
+                    clarification_field=clarification[1],
+                    limit_reason=limit_reason,
+                )
+            reason = "clarification_not_load_bearing"
+            answer = ""
+            citation_ids = []
         else:
+            if parsed.get("response_type") != "answer":
+                reason = "invalid_response_type"
             answer = parsed.get("answer")
             citation_ids = parsed.get("citation_ids")
             if not isinstance(answer, str) or not answer.strip():
@@ -318,6 +389,7 @@ class BoundedAgent:
         rewrites_used = 0
         total_tokens = 0
         evidence: dict[str, AgentCitation] = {}
+        evidence_metadata: dict[str, dict[str, Any]] = {}
         query_forms = {normalize_query(question)}
         limit_reason: str | None = None
 
@@ -395,6 +467,7 @@ class BoundedAgent:
                     raw_content=assistant_message.get("content"),
                     conversation=conversation,
                     evidence=evidence,
+                    evidence_metadata=evidence_metadata,
                     telemetry=telemetry,
                     tool_calls=tool_calls_used,
                     rewrites=rewrites_used,
@@ -404,15 +477,57 @@ class BoundedAgent:
 
             if not calls:
                 conversation.append(assistant_message)
+                clarification = _clarification_parts(assistant_message.get("content"))
+                clarification_rejected = False
+                if clarification is not None and not _clarification_is_load_bearing(
+                    clarification[1], evidence_metadata
+                ):
+                    clarification_rejected = True
+                    corrected = await self.model.complete(
+                        executor,
+                        messages=[
+                            *conversation,
+                            {
+                                "role": "system",
+                                "content": (
+                                    "The requested detail does not change the answer across the "
+                                    "retrieved evidence. Do not ask a clarification; answer now "
+                                    "with retrieved citation IDs, or abstain."
+                                ),
+                            },
+                        ],
+                        tools=None,
+                        response_format=FINAL_RESPONSE_FORMAT,
+                        telemetry=telemetry,
+                    )
+                    total_tokens += corrected.total_tokens
+                    if total_tokens > self.settings.agent_token_budget:
+                        await self._record_limit(
+                            executor,
+                            telemetry=telemetry,
+                            error_code=ErrorCode.AGENT_LIMIT_REACHED,
+                            limit="tokens",
+                            tool_calls=tool_calls_used,
+                            rewrites=rewrites_used,
+                            total_tokens=total_tokens,
+                        )
+                        raise RescueError(
+                            ErrorCode.AGENT_LIMIT_REACHED,
+                            detail="clarification correction exceeded the agent token budget",
+                        )
+                    assistant_message = dict(corrected.message)
+                    conversation.append(assistant_message)
                 return await self._final_result(
                     executor,
                     raw_content=assistant_message.get("content"),
                     conversation=conversation,
                     evidence=evidence,
+                    evidence_metadata=evidence_metadata,
                     telemetry=telemetry,
                     tool_calls=tool_calls_used,
                     rewrites=rewrites_used,
                     total_tokens=total_tokens,
+                    allow_clarification=not clarification_rejected,
                 )
 
             conversation.append(assistant_message)
@@ -460,7 +575,7 @@ class BoundedAgent:
                     query_forms.add(query)
                     rewrites_used += 1
                 output = await self.tools.execute(name, arguments)
-                _collect_evidence(output, evidence)
+                _collect_evidence(output, evidence, evidence_metadata)
                 tool_calls_used += 1
                 conversation.append(
                     {

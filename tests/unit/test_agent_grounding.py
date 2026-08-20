@@ -69,8 +69,11 @@ def _answer(citation_id: str | None) -> dict[str, Any]:
         "role": "assistant",
         "content": json.dumps(
             {
+                "response_type": "answer",
                 "answer": "مقدار متغیر را در تنظیمات برنامه ثبت کنید.",
                 "citation_ids": [citation_id] if citation_id else [],
+                "clarification_question": None,
+                "required_field": None,
             },
             ensure_ascii=False,
         ),
