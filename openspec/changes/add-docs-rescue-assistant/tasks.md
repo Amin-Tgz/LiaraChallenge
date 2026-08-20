@@ -69,7 +69,7 @@
 
 ## 9. Chat agent
 
-- [ ] 9.1 Implement the gateway client with primary and fallback providers; verify a simulated primary failure falls back and records the occurrence
+- [x] 9.1 Implement the gateway client with primary and fallback providers; verify a simulated primary failure falls back and records the occurrence
 - [ ] 9.2 Declare the three allowlisted tools using native function calling; verify no other capability is reachable from the loop
 - [ ] 9.3 Implement the bounded agent loop enforcing tool-call, rewrite, token, and timeout limits in code; verify each limit terminates the turn under test
 - [ ] 9.4 Implement mandatory citation and abstention on insufficient evidence; verify an unanswerable question abstains with the no-evidence code rather than answering
