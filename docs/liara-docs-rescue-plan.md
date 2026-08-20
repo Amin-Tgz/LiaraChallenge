@@ -5,16 +5,29 @@
 ## 1. وضعیت سند
 
 - **نام کاری پروژه:** Liara Documentation Rescue Assistant
-- **وضعیت:** آماده برای تبدیل به OpenSpec proposal/spec/design/tasks
+- **وضعیت:** OpenSpec change ساخته شد — `openspec/changes/add-docs-rescue-assistant/`
 - **مالک و مجری:** یک توسعه‌دهنده
-- **زمان پیاده‌سازی:** دو روز
+- **زمان پیاده‌سازی:** **حداکثر دو روز** (قطعی)
 - **زبان اصلی محصول:** فارسی، با پشتیبانی صحیح از محتوای فنی انگلیسی و کدهای LTR
 - **زیرساخت مقصد:** لیارا
 - **منبع داده:** فقط مستندات عمومی لیارا
 - **مخزن مستندات:** `https://github.com/liara-cloud/docs`
 - **وب‌سایت مستندات:** `https://docs.liara.ir/`
 
-این سند Source of Truth پروژه است. اگر در زمان پیاده‌سازی تصمیمی با این سند تعارض داشت، ابتدا باید سند یا OpenSpec artifacts به‌روزرسانی شوند و سپس کد تغییر کند.
+### قلمرو این سند و ترتیب اولویت
+
+این سند مالک **دامنه‌ی محصول** است: مسئله، کاربران، تجربه‌ی کاربری، معیارهای داوری، سناریوی دمو و Definition of Done.
+
+`docs/deployment.md` مالک **زیرساخت و پیکربندی** است: سرویس‌ها، مدل‌ها، قیمت، متغیرهای محیطی، pre-pass مربوط به MDX، taxonomy خطاها و ترتیب استقرار. آن سند دیرتر و بر پایه‌ی واقعیت‌های تأییدشده نوشته شده است.
+
+```text
+openspec/changes/<active>/  →  docs/deployment.md  →  این سند
+   (مشخص‌ترین)                    (زیرساخت)            (دامنه‌ی محصول)
+```
+
+در تعارض زیرساختی، `deployment.md` مقدم است. در تعارض مربوط به دامنه‌ی محصول، این سند مقدم است. اگر در زمان پیاده‌سازی تصمیمی با این‌ها تعارض داشت، ابتدا سند یا OpenSpec artifacts به‌روزرسانی شوند و سپس کد تغییر کند.
+
+> **نکته:** بخش‌های ۸ (معماری)، ۹.۳ و ۹.۴ (زیرساخت و AI)، ۱۰ (هزینه) و ۲۱ (Observability) در `deployment.md` با جزئیات دقیق‌تر و مقادیر تأییدشده بازنویسی شده‌اند. مقادیر عملیاتی را از آنجا بخوانید.
 
 ---
 
@@ -61,18 +74,24 @@
 
 ## 4. معیارهای داوری و اولویت اجرایی
 
-| معیار | امتیاز | اولویت پروژه |
-| --- | ---: | --- |
-| کیفیت و صحت پاسخ‌ها | 80 | P0 — بیشترین تمرکز |
-| UI و تجربه کاربری | 55 | P0 |
-| Agentic و Personalization | 50 | P0 |
-| امنیت، پایداری و Monitoring | 50 | P0/P1 |
-| استقرار روی لیارا | 40 | P0 |
-| بهینه‌سازی هزینه | 25 | P0 |
+مجموع ۳۰۰ امتیاز. تخصیص تلاش باید از تخصیص امتیاز پیروی کند، نه برعکس.
+
+| معیار | امتیاز | سهم | لایه‌ی عمق (بخش ۷) |
+| --- | ---: | ---: | --- |
+| کیفیت و صحت پاسخ‌ها | 80 | ٪۲۷ | **لایه‌ی A** — بیشترین تمرکز |
+| UI و تجربه کاربری | 55 | ٪۱۸ | **لایه‌ی A** |
+| Agentic و Personalization | 50 | ٪۱۷ | لایه‌ی B |
+| امنیت، پایداری و Monitoring | 50 | ٪۱۷ | لایه‌ی B |
+| استقرار روی لیارا | 40 | ٪۱۳ | لایه‌ی B — ولی **اول** انجام می‌شود |
+| بهینه‌سازی هزینه | 25 | ٪۸ | لایه‌ی C |
 
 قاعده‌ی مدیریت زمان:
 
 > هیچ ابزار زیرساختی یا قابلیت جانبی نباید باعث ناقص‌ماندن کیفیت پاسخ، UX اصلی، MCP، Skill یا استقرار روی لیارا شود.
+
+این قاعده مستقیماً باعث حذف OpenTelemetry، Prometheus، Grafana، Dozzle و Lazydocker از دامنه شد. داور تفاوت بین «پنج ابزار مانیتورینگ» و «structured logging به‌همراه داشبوردی با اعداد واقعی» را نمی‌بیند؛ ولی تفاوت در کیفیت پاسخ را قطعاً می‌بیند.
+
+در معیار ۲۵ امتیازی هزینه هم، آنچه امتیاز می‌آورد **روایت** است: مسیر سریع FAQ، هدایت به Skill و MCP پیش از Chat، cache و ثبت token/cost. کل هزینه‌ی پروژه زیر ۲۰ دلار است، پس خودِ پول موضوع نیست.
 
 ---
 
@@ -163,76 +182,130 @@ Feedback باید برای analytics و بهبود ranking ذخیره شود.
 
 ## 7. دامنه‌ی نسخه‌ی مسابقه
 
-### 7.1 قابلیت‌های P0 و اجباری
+**قاعده‌ی حاکم بر دو روز:** هیچ قابلیتی حذف نمی‌شود؛ فقط **عمق** آن تغییر می‌کند. همه‌ی قابلیت‌ها در دمو حاضرند، ولی بعضی نازک پیاده‌سازی می‌شوند. این باعث می‌شود کم‌کردن دامنه یک تصمیم آگاهانه باشد، نه یک غافلگیری در ساعت آخر.
 
+### 7.1 لایه‌ی A — باید واقعاً باکیفیت باشد
+
+مستقیماً معیارهای ۸۰ و ۵۵ امتیازی را هدف می‌گیرد.
+
+- ingestion و chunking مبتنی بر `<Section>` با anchor دقیق برای citation.
+- hybrid retrieval (dense + lexical) با fusion از نوع RRF.
+- نرمال‌سازی فارسی، یکسان در زمان ایندکس و زمان کوئری.
 - FAQ semantic search عملیاتی.
-- Chat RAG دارای citation.
-- bounded Agentic RAG برای سؤال‌های پیچیده.
-- سؤال تکمیلی هنگام کمبود اطلاعات ضروری.
+- Chat RAG دارای citation دقیق و قابل‌کلیک.
 - حفظ Conversation و سؤال اولیه بعد از refresh.
-- Skill قابل‌نصب و قابل‌استفاده.
-- MCP قابل‌نصب و قابل‌استفاده.
+- rescue flow کامل: landing → پرسش‌های مرتبط → feedback → سه ابزار نجات.
+- RTL صفحه با code blocks به‌صورت LTR و متن ترکیبی فارسی/انگلیسی صحیح.
 - تصاویر مرتبط در ingestion، retrieval metadata و UI.
-- Portkey routing، retry، fallback و circuit breaking.
-- Rate limiting، token budget و secret management.
-- Opik tracing و evaluation.
-- structured logging و حداقل OpenTelemetry instrumentation.
+
+### 7.2 لایه‌ی B — باید موجود و قابل‌نمایش باشد، نازک کافی است
+
+معیارهای ۵۰ و ۴۰ امتیازی.
+
+- bounded Agentic RAG با سقف tool call و rewrite.
+- سؤال تکمیلی فقط وقتی پاسخ را عوض می‌کند.
+- session technical profile.
+- Skill قابل‌نصب و قابل‌استفاده.
+- MCP قابل‌نصب و قابل‌استفاده — **اولویت آخر در ترتیب اجرا**، چون به API مستقرشده وابسته است.
+- پنل ادمین: احراز هویت، مدیریت FAQ، threshold، دکمه‌ی sync.
 - داشبورد سبک quality/cost/failure.
-- CI/CD، reindex workflow و deployment روی لیارا.
-- تست‌های unit، integration و Playwright برای مسیر اصلی.
+- Portkey gateway به‌عنوان یک app service روی لیارا، با retry، fallback و circuit breaking.
+- Rate limiting، token budget و secret management.
+- health/readiness تفکیک‌شده و taxonomy خطاها.
+- استقرار روی لیارا — **در ساعت اول، نه روز آخر**.
 
-### 7.2 قابلیت‌های P1 در صورت باقی‌ماندن زمان
+### 7.3 لایه‌ی C — حداقلی
 
+معیار ۲۵ امتیازی و بیمه‌ی کیفیت.
+
+- Opik tracing (hosted) برای spanهای retrieval و LLM.
+- structured logging با correlation IDs.
+- ثبت token/cost برای هر request.
+- exact-match cache.
+- evaluation: ۱۰ سؤال golden دست‌نویس + مجموعه‌ی تولیدشده با داور LLM.
+- یک مسیر happy path در Playwright.
+- `ci.yml` و `deploy.yml`.
+- reindex workflow به‌صورت دستی (`workflow_dispatch`).
+
+### 7.4 قابلیت‌های P1 در صورت باقی‌ماندن زمان
+
+- Vision fallback برای تصاویر با alt ضعیف — مدل chat به‌صورت بومی vision دارد، پس هزینه‌ی افزوده‌ی آن صفر است و فقط یک prompt variant لازم دارد.
 - Grafana dashboard کامل.
-- Vision captioning انتخابی برای تصاویر ضعیف.
 - semantic cache پیشرفته.
 - پیشنهاد خودکار draft برای اصلاح مستندات.
+- سناریوهای failure در Playwright.
 - visual regression گسترده.
+- `pg_trgm` برای تطبیق فازی فارسی، در صورت در دسترس بودن روی لیارا.
 
-### 7.3 خارج از Scope مسابقه
+### 7.5 خارج از Scope مسابقه
 
-- Self-host کامل Opik.
-- Self-host embedding در production.
+- OpenTelemetry، Prometheus، Grafana، Dozzle و Lazydocker — با structured logging و شمارنده‌های داخل Postgres جایگزین شدند.
+- اجرای Opik توسط خودمان — استک آن به ClickHouse، MySQL، MinIO و چند سرویس دیگر نیاز دارد.
+- اجرای embedding روی سخت‌افزار خودمان در production.
 - Kubernetes.
-- احراز هویت کامل کاربران نهایی.
+- احراز هویت کاربران نهایی — فقط ادمین.
 - Agent آزاد و نامحدود.
 - caption کردن همه‌ی تصاویر با Vision.
 - چند Vector Database هم‌زمان.
 - پنل مدیریت enterprise.
 - auto-merge تغییرات مستندات بدون تأیید انسان.
+- endpoint نوع `/v1/batch` برای تولید FAQ.
 
 ---
 
 ## 8. معماری سطح بالا
 
+> توپولوژی دقیق همراه با اندازه‌ی RAM هر سرویس در `docs/deployment.md` §۳ است.
+
 ```mermaid
 flowchart TD
-    U[React Web App] --> API[FastAPI API]
+    U[Browser] --> API["API (FastAPI) + Web bundle<br/>same origin"]
     API --> PG[(PostgreSQL + pgvector)]
     API --> R[(Redis)]
-    API --> W[Background Worker]
-    W --> PG
+    API --> PK[Portkey Gateway - Liara service]
+    W[Worker] --> PG
     W --> R
-    API --> PK[Portkey AI Gateway]
     W --> PK
+    R -.->|"token relay via Redis Streams"| API
     PK --> A[AvalAI Primary]
     PK --> B[OpenAI-compatible Fallback]
-    API --> O[Opik]
-    API --> OT[OpenTelemetry Collector]
+    API --> O[Opik SaaS - external]
     W --> O
-    W --> OT
 ```
 
 ### 8.1 سرویس‌های deployشده
 
-1. **Web:** React production build.
-2. **API:** FastAPI، REST/SSE، FAQ، Chat و MCP endpoint.
-3. **Worker:** indexing و jobهای asynchronous.
-4. **PostgreSQL + pgvector:** state، metadata، FAQ، chunks و vectors.
-5. **Redis:** queue، locks، rate limiting، cache و وضعیت موقت streaming.
-6. **Portkey Gateway:** provider routing و resiliency.
+**پنج سرویس، مجموعاً حدود ۵ گیگابایت.**
 
-Opik در نسخه‌ی مسابقه می‌تواند hosted باشد. MCP برای کاهش تعداد سرویس‌ها در همان API ارائه شود.
+1. **API + Web:** FastAPI که REST/SSE، FAQ، Chat و MCP endpoint را ارائه می‌دهد و build نهایی React را هم به‌صورت static سرو می‌کند.
+2. **Worker:** indexing، تولید FAQ و jobهای asynchronous.
+3. **PostgreSQL + pgvector:** state، metadata، FAQ، chunks و vectors.
+4. **Redis:** queue، locks، rate limiting، cache و relay مربوط به streaming.
+5. **Portkey Gateway:** provider routing و resiliency.
+
+**چرا Web داخل API ادغام شد؟** اگر Web و API روی دو زیردامنه‌ی جدا باشند، cookie نیازمند `SameSite=None; Secure` و CORS با credentials می‌شود که با قاعده‌ی «CORS محدود» در تضاد است. هم‌ریشه‌بودن هر دو مشکل را هم‌زمان حل می‌کند و یک سرویس هم کم می‌کند.
+
+MCP برای کاهش تعداد سرویس‌ها در همان API ارائه می‌شود.
+
+### 8.2 دو محیط اجرا
+
+هیچ سرویسی «self-host» نیست؛ دقیقاً دو محیط وجود دارد و هر سرویس در هر دو حاضر است.
+
+| | توسعه‌ی محلی | production |
+| --- | --- | --- |
+| اجرا | Docker Desktop و `docker compose` | سرویس‌های لیارا |
+| PostgreSQL + pgvector | container | PostgreSQL مدیریت‌شده‌ی لیارا با افزونه‌ی Pgvector |
+| Redis | container | Redis مدیریت‌شده‌ی لیارا |
+| API + Web | container با hot reload | app service لیارا |
+| Worker | container | app service لیارا |
+| Portkey Gateway | container | app service لیارا از همان image |
+| پیکربندی | فایل `.env` در gitignore | پنل secrets لیارا |
+
+**Portkey در هر دو محیط image خودمان است** — نسخه‌ی open-source gateway را اجرا می‌کنیم، نه سرویس SaaS شرکت Portkey.
+
+**Opik تنها وابستگی خارجی است.** چیزی از آن deploy نمی‌شود و هر دو محیط به همان endpoint ابری وصل می‌شوند. اجرای خودمان از Opik خارج از Scope است چون به ClickHouse، MySQL، MinIO و چند سرویس دیگر نیاز دارد.
+
+`docker-compose.yml` باید کل استک را با یک دستور بالا بیاورد تا فاصله‌ی محیط توسعه و production کم بماند و همان imageها روی لیارا بروند.
 
 ---
 
@@ -284,26 +357,29 @@ Opik در نسخه‌ی مسابقه می‌تواند hosted باشد. MCP بر
 
 ### 9.4 AI
 
+> فهرست کامل و به‌روز متغیرهای محیطی در `docs/deployment.md` §۵ است. خلاصه‌ی زیر فقط تصمیم‌های محصولی را نگه می‌دارد.
+
 - Provider API باید OpenAI-compatible باشد.
 - Primary provider: AvalAI.
-- Secondary provider: configurable OpenAI-compatible provider.
-- Gateway: Portkey.
-- مدل Chat از environment تنظیم شود و hard-code نشود.
+- Secondary provider: یک provider دیگر OpenAI-compatible (گزینه‌ها: Vercel AI Gateway یا GapGPT).
+- Gateway: Portkey — image خودمان، در توسعه با docker compose و در production به‌عنوان app service لیارا.
+- مدل Chat و FAQ: `gemini-3.7-flash` — از environment تنظیم شود و hard-code نشود.
 - مدل embedding قطعی: `text-embedding-3-large`.
+- **ابعاد embedding قطعی: `1536`** — نه مقدار پیش‌فرض مدل.
 - تنظیمات Chat و Embedding کاملاً جدا باشند.
+- مدل داور evaluation باید با مدل تحت آزمون **متفاوت** باشد.
 
 ```env
-LLM_BASE_URL=
-LLM_API_KEY=
-LLM_MODEL=
-
-EMBEDDING_BASE_URL=
-EMBEDDING_API_KEY=
+LLM_MODEL=gemini-3.7-flash
+FAQ_LLM_MODEL=gemini-3.7-flash
 EMBEDDING_MODEL=text-embedding-3-large
-EMBEDDING_DIMENSIONS=3072
+EMBEDDING_DIMENSIONS=1536
+EVAL_JUDGE_MODEL=<must differ from LLM_MODEL>
 ```
 
-اگر dimensions در Provider پشتیبانی نشود، مقدار پیش‌فرض مدل استفاده شود و dimension واقعی در index metadata ثبت شود.
+> **چرا ۱۵۳۶ و نه ۳۰۷۲؟** pgvector سقف ایندکس HNSW را روی ۲۰۰۰ بُعد می‌گذارد، بنابراین مقدار پیش‌فرض مدل (۳۰۷۲) اصلاً قابل ایندکس‌شدن نیست و هر کوئری به sequential scan تبدیل می‌شود. پشتیبانی AvalAI از پارامتر `dimensions` با فراخوانی واقعی تأیید شده است. تصمیم قطعی است؛ تغییر آن کل بردارهای ذخیره‌شده را باطل می‌کند.
+
+بُعد واقعی استفاده‌شده باید در metadata مربوط به index version ثبت شود.
 
 ---
 
@@ -311,17 +387,19 @@ EMBEDDING_DIMENSIONS=3072
 
 بررسی اولیه‌ی مخزن فعلی:
 
-- حدود 1,142 فایل MDX.
+- حدود 1,142 فایل MDX در ۱۲ بخش سطح بالا.
 - حدود 7.75 MB محتوای MDX.
-- حدود 2,512,904 توکن با tokenizer خانواده‌ی embedding OpenAI، پیش از پاک‌سازی.
-- هزینه‌ی خام با `text-embedding-3-large` و قیمت مستقیم رسمی OpenAI حدود 0.33 دلار.
-- با overlap معقول، هزینه همچنان به‌طور واضح کمتر از یک دلار است.
+- حدود 2,512,904 توکن پیش از پاک‌سازی؛ حدود ۱.۸ میلیون توکن پس از حذف JSX.
+- نرخ تأییدشده‌ی AvalAI برای `text-embedding-3-large`: **۰.۱۳ دلار به ازای هر یک میلیون توکن**.
+
+> جدول کامل هزینه در `docs/deployment.md` §۸ است. خلاصه: **حدود ۴.۲۵ دلار** برای کل ایندکس اولیه شامل تولید FAQ، و حدود **۰.۰۰۵ دلار برای هر کوئری**. کل هزینه‌ی پروژه زیر ۲۰ دلار می‌ماند.
 
 نتیجه:
 
 - GPU شخصی در معماری production نقشی ندارد.
 - embedding از API انجام می‌شود.
 - local embedding فقط گزینه‌ی توسعه/آزمایش آینده است.
+- **هزینه محدودیت واقعی نیست؛ محدودیت واقعی wall-clock است.** تولید FAQ برای کل مستندات حدود ۸ تا ۱۵ دقیقه طول می‌کشد و embedding یک تا دو دقیقه.
 
 ---
 
@@ -344,7 +422,12 @@ EMBEDDING_DIMENSIONS=3072
 
 ### 11.2 قواعد Chunking
 
-- headingهای H1/H2/H3 مرزهای اصلی باشند.
+> ⚠️ **یافته‌ی مهم از بررسی مخزن واقعی:** عنوان‌های section در این مستندات **Markdown نیستند**. آن‌ها کامپوننت JSX به شکل `<Section id="..." title="..." />` هستند و فقط H1 به‌صورت Markdown نوشته شده است. اگر chunking فقط دنبال heading مارک‌داون بگردد، هر فایل به یک بلوک بزرگ و بی‌ساختار تبدیل می‌شود و کیفیت retrieval بی‌صدا از بین می‌رود.
+>
+> نکته‌ی مثبت اینکه `id` و `title` صریح هستند، پس `heading_anchor` و `section` بدون حدس‌زدن به‌دست می‌آیند و citation به‌صورت `{source_url}#{id}` مستقیماً به همان بخش لینک می‌دهد. جدول کامل تبدیل‌ها در `docs/deployment.md` §۷ است.
+
+- مرز اصلی chunk، کامپوننت `<Section>` است؛ H1 مارک‌داون مرز سطح بالاتر.
+- تطبیق باید بر اساس **نام تگ JSX** باشد، نه مسیر import — مخزن در مسیرهای import ناسازگار است.
 - code block از توضیح بلافاصله قبل و بعد خود جدا نشود.
 - Step component و تصویر مرتبط در یک logical chunk باقی بمانند.
 - breadcrumb و section title به متن embedding افزوده شوند.
@@ -400,6 +483,8 @@ Metadata برای soft boosting استفاده شود. فیلتر سخت فقط 
 
 ### 12.2 Vision Fallback
 
+**وضعیت: P1 (بخش ۷.۴).** مدل chat یعنی `gemini-3.7-flash` به‌صورت بومی vision دارد، بنابراین این قابلیت نیازی به مدل جداگانه، متغیر محیطی جداگانه یا یکپارچه‌سازی تازه ندارد و صرفاً یک prompt variant روی همان client است. هزینه‌ی افزوده‌ی آن عملاً صفر است، ولی در دو روز جزو لایه‌ی الزامی نیست.
+
 Vision فقط در این حالت‌ها اجرا شود:
 
 - alt خالی، گنگ یا فاقد اطلاعات است.
@@ -419,11 +504,15 @@ caption کردن تمام تصاویر در Scope مسابقه نیست.
 
 ### 13.1 FAQ/Related Questions Fast Path
 
-- مجموعه‌ای محدود از سؤال و جواب‌های مرتبط از مستندات ساخته و دستی بازبینی شود.
-- query embedding با embedding سؤال‌های FAQ مقایسه شود.
+- مجموعه‌ی سؤال و جواب‌های مرتبط **با LLM از روی مستندات ایندکس‌شده تولید شود**، سپس در پنل ادمین بازبینی، ویرایش یا حذف شود.
+- تولید یک‌بار برای کل مستندات اجرا می‌شود؛ پس از آن ادمین با دکمه‌ی sync فقط برای مستندات جدید یا تغییرکرده دوباره تولید می‌کند.
+- خروجی تولید با structured output اعتبارسنجی شود تا خطاهای parse حذف شوند.
+- query embedding با embedding سؤال‌های FAQ مقایسه شود — یک فضای embedding جدا از chunkها.
 - نتایج بر اساس semantic similarity و curated priority مرتب شوند.
-- threshold و top-k configurable باشند.
-- نتیجه‌ی ضعیف نباید به‌زور نمایش داده شود.
+- threshold و top-k configurable باشند و **threshold از پنل ادمین قابل تغییر باشد**.
+- واحد آستانه **similarity** است، نه distance. مقدار پیش‌فرض `0.4`.
+- نتیجه‌ی ضعیف نباید به‌زور نمایش داده شود؛ در این حالت به کاربر گفته شود چیزی پیدا نشد و ابزارهای نجات پیشنهاد شوند.
+- این مسیر باید کاملاً sync باشد و **هیچ فراخوانی مدل برای تولید پاسخ نداشته باشد**.
 - success/failure feedback ذخیره شود.
 
 Popularity در آینده از داده‌های واقعی محاسبه شود:
@@ -661,14 +750,16 @@ Retry فقط برای failureهای transient مانند timeout، 429 و 5xx ا
 
 ### 21.1 تفکیک مسئولیت
 
-| ابزار | مسئولیت |
-| --- | --- |
-| Opik | LLM/RAG/Agent tracing، evaluation و cost |
-| OpenTelemetry | traces، metrics و structured runtime telemetry |
-| Prometheus-compatible metrics | time-series metrics |
-| Grafana | visualization و alerting در صورت زمان |
-| Dozzle | live Docker logs در development |
-| Lazydocker | ابزار دستی توسعه‌دهنده، نه monitoring production |
+> در نسخه‌ی دو روزه، پشته‌ی telemetry عمداً کوچک شد. شش ابزار مانیتورینگ برای یک توسعه‌دهنده در دو روز، دقیقاً همان «ابزار زیرساختی» است که قاعده‌ی بخش ۴ نسبت به آن هشدار می‌دهد. آنچه داور می‌بیند، داشبوردی با اعداد واقعی است، نه تعداد ابزارها.
+
+| ابزار | مسئولیت | وضعیت |
+| --- | --- | --- |
+| Opik (hosted) | LLM/RAG/Agent tracing، evaluation و cost | داخل Scope |
+| structured JSON logging | رویدادهای runtime همراه با correlation IDs | داخل Scope |
+| شمارنده‌ها در PostgreSQL | متریک‌های محصولی و داشبورد | داخل Scope |
+| OpenTelemetry / Prometheus | — | خارج از Scope |
+| Grafana | visualization و alerting | P1 |
+| Dozzle / Lazydocker | ابزار دستی توسعه‌دهنده، نه monitoring production | خارج از Scope |
 
 ### 21.2 Correlation IDs
 
@@ -858,7 +949,7 @@ Use OpenSpec artifacts as the source of truth.
 - PostgreSQL/pgvector retrieval.
 - Redis queue و idempotency.
 - Portkey primary/fallback behavior با mock provider.
-- Opik/OpenTelemetry instrumentation failure نباید request اصلی را fail کند.
+- failure در telemetry (Opik یا logging) نباید request اصلی کاربر را fail کند.
 - index activation و rollback.
 - MCP tool schemas و responses.
 
@@ -901,15 +992,23 @@ Use OpenSpec artifacts as the source of truth.
 
 ## 26. Evaluation
 
-حداقل 60 سؤال curated:
+مجموعه‌ی ارزیابی:
 
-| گروه | تعداد حداقل |
-| --- | ---: |
-| ساده و مستقیم | 15 |
-| پیچیده/چندمرحله‌ای | 15 |
-| دارای error message | 10 |
-| مبهم و نیازمند clarification | 10 |
-| بدون پاسخ یا خارج از مستندات | 10 |
+Evaluation دو لایه دارد. لایه‌ی انسانی مرجع اعتماد است و لایه‌ی تولیدشده پوشش می‌دهد.
+
+**لایه‌ی ۱ — Golden Set انسانی، ۱۰ سؤال.** فایل: `docs/eval/golden-set.md`. این‌ها دستی و مستقیماً از روی صفحات واقعی مستندات نوشته شده‌اند و بالاترین درجه‌ی اعتماد را دارند. هر افت در این مجموعه، merge به main را مسدود می‌کند. همچنین معیار کالیبراسیون داور است: اگر داور با قضاوت انسانی روی این مجموعه اختلاف داشت، **داور اشتباه است، نه پاسخ**.
+
+| گروه | سؤال‌ها | تعداد |
+| --- | --- | ---: |
+| ساده و مستقیم | Q1–Q3 | 3 |
+| پیچیده/چندمرحله‌ای | Q4–Q5 | 2 |
+| دارای error message | Q6–Q7 | 2 |
+| مبهم و نیازمند clarification | Q8–Q9 | 2 |
+| بدون پاسخ یا خارج از مستندات | Q10 | 1 |
+
+**لایه‌ی ۲ — مجموعه‌ی تولیدشده، حدود ۲۰ تا ۵۰ سؤال.** با LLM از روی chunkها ساخته می‌شود تا پوشش ارزان در سرویس‌ها و سطوح دشواری مختلف به‌دست آید. سیگنال جهت‌دهنده است، نه دروازه.
+
+> ده سؤال واقعی از شصت سؤال تولیدشده ارزشمندتر است. مهم‌ترین سطر جدول بالا Q10 است: تنها سؤالی که fabrication را آشکار می‌کند.
 
 برای هر سؤال:
 
@@ -932,6 +1031,10 @@ Use OpenSpec artifacts as the source of truth.
 - abstention correctness.
 - latency.
 - token/cost.
+
+**قاعده‌ی داور:** مدل داور (`EVAL_JUDGE_MODEL`) باید با مدل تحت آزمون (`LLM_MODEL`) **متفاوت** باشد. مدلی که خروجی خودش را نمره می‌دهد، سوگیری self-preference دارد؛ ساختار و عبارت‌پردازی خودش را ترجیح می‌دهد و خطاهای خودش را درست می‌شمارد. نتیجه، عددهای دقیق و بی‌معنا است.
+
+`Recall@k` و صحت citation کاملاً **deterministic** محاسبه می‌شوند و هیچ مدلی در آن‌ها دخیل نیست؛ به همین دلیل بیشترین وزن اعتماد روی آن‌هاست. پیش از اعتماد به هر عدد تجمیعی، حدود ۱۰ قضاوت داور روی golden set به‌صورت دستی بازبینی شود.
 
 Evaluation با Opik اجرا و نتیجه‌ی baseline ذخیره شود. تغییر prompt/retrieval مهم نباید بدون مشاهده‌ی regression وارد main شود.
 
@@ -986,64 +1089,51 @@ GET    /metrics
 
 ## 29. برنامه‌ی اجرایی
 
-### قسمت 1 — Foundation و Ingestion
+> ترتیب اجرایی دقیق و قابل‌ردیابی در `openspec/changes/add-docs-rescue-assistant/tasks.md` است. آنچه در ادامه می‌آید نمای کلی دو روز است.
 
-- repository structure و OpenSpec.
-- Docker Compose.
-- FastAPI، React، PostgreSQL، Redis.
-- uv و lockfile.
-- MDX parser و metadata extraction اولیه.
-- schema و migration اولیه.
+**اصل حاکم بر ترتیب: استقرار در ساعت اول، نه روز آخر.** زنجیره‌ی وابستگی این است:
 
-### قسمت 2 — Retrieval و FAQ
+```text
+Skill  ──نیاز دارد به──▶  MCP  ──نیاز دارد به──▶  API مستقرشده  ──نیاز دارد به──▶  index زنده
+```
 
-- chunking text/code/image-aware.
-- embedding batch با `text-embedding-3-large`.
-- pgvector index.
-- hybrid search و fusion.
-- FAQ related questions.
-- evaluation dataset اولیه.
+هیچ‌کدام از این‌ها تا وقتی استقرار کار نکند قابل تأیید نیستند. پس walking skeleton در ساعت اول deploy می‌شود، وقتی هنوز ساده است.
 
-### قسمت 3 — Chat و Resilience
+### پیش‌نیاز — قبل از شروع روز اول
 
-- Conversation persistence.
-- RAG answer با citation.
-- Portkey primary/fallback.
-- Opik tracing.
-- SSE streaming.
+- rotate کردن کلید API لو رفته.
+- فعال‌کردن افزونه‌ی pgvector قبل از وجود داده (فعال‌سازی باعث ریستارت دیتابیس می‌شود).
+- provision کردن Postgres، Redis و سه سرویس اپلیکیشن.
+- تأیید در دسترس بودن provider دوم **از داخل شبکه‌ی لیارا**، نه فقط از سیستم شخصی.
 
-### قسمت 4 — Agent، MCP و Skill
+### روز اول — از استقرار تا پاسخ
 
-- bounded agent tools.
-- clarification و technical session profile.
-- MCP عملیاتی.
-- Skill عملیاتی و install guide.
+1. walking skeleton مستقرشده روی لیارا با `/health/ready` سبز.
+2. schema و migration، به‌همراه enum مربوط به taxonomy خطاها.
+3. نرمال‌ساز فارسی به‌عنوان یک تابع pure و نسخه‌دار.
+4. pre-pass مربوط به JSX و chunking بر اساس `<Section>`.
+5. embedding کل مستندات و ساخت index version با فعال‌سازی atomic.
+6. hybrid retrieval با fusion از نوع RRF و citation دقیق.
+7. bounded agent، صف Redis، worker و relay مربوط به SSE.
+8. تولید FAQ برای کل مستندات.
 
-### قسمت 5 — UI/UX و Dashboard
+### روز دوم — از پاسخ تا محصول
 
-- animationها و rescue flow.
-- Markdown/code/source/image rendering.
-- back/refresh/reconnect UX.
-- responsive و RTL.
-- dashboard سبک.
-- Playwright happy path.
+1. rescue flow کامل در frontend، RTL/LTR و رندر پاسخ.
+2. Skill به‌همراه راهنمای نصب.
+3. پنل ادمین و داشبورد.
+4. Portkey، fallback و Opik.
+5. rate limiting، secret و health.
+6. MCP — آخرین مورد از نظر اولویت.
+7. اجرای evaluation روی golden set و ثبت baseline.
+8. Playwright happy path و CI/CD.
+9. تمرین و ضبط دمو.
 
-### قسمت 6 — Production Readiness و Deployment
+### قاعده‌ی نهایی
 
-- rate limit، cache، idempotency و queue failure handling.
-- OpenTelemetry/metrics/health.
-- GitHub Actions.
-- docs reindex workflow.
-- deployment روی لیارا.
-- failure E2E tests.
-
-### روز باقی‌مانده — فقط کیفیت و رفع اشکال
-
-- اجرای evaluation.
-- بهبود retrieval/prompt.
-- رفع regression.
-- آماده‌سازی سناریوی دمو.
-- عدم افزودن feature جدید مگر برای blocker.
+- feature جدید اضافه نشود مگر برای رفع blocker.
+- اگر روز اول طولانی شد، شیر فشار **دامنه‌ی ingestion** است: `INGEST_SECTIONS` را محدود کنید، ship کنید، بعداً با تغییر config دوباره اجرا کنید. هرگز refactor لازم نیست.
+- اگر relay مربوط به SSE از برنامه عقب انداخت، جایگزین از پیش تعیین‌شده تولید in-process است.
 
 ---
 
@@ -1052,6 +1142,10 @@ GET    /metrics
 سؤال پیشنهادی:
 
 > پروژه‌ی FastAPI من روی سیستم خودم اجرا می‌شود، ولی بعد از deploy روی لیارا بالا نمی‌آید.
+
+⚠️ **قبل از ضبط دمو تأیید شود.** بررسی مخزن واقعی نشان داد `src/pages/paas/` برای `django`، `flask`، `nodejs`، `laravel`، `dotnet` و بقیه پوشه‌ی اختصاصی دارد، ولی **پوشه‌ی مستقلی برای FastAPI ندارد**؛ FastAPI فقط به‌صورت عمومی زیر `paas/python/` پوشش داده شده است.
+>
+> اگر retrieval برای این سؤال نتیجه‌ی قوی برنگرداند، دمو دقیقاً در بدترین لحظه ضعیف می‌شود. یا پوشش FastAPI در `paas/python/how-tos/` و `related-apps/` تأیید شود، یا سؤال به Django یا Flask تغییر کند که بخش کامل دارند. پوشه‌ی `paas/python/fix-common-errors/` هم دقیقاً برای همین دسته از سؤال‌ها ساخته شده و گزینه‌ی خوبی است.
 
 دمو:
 
@@ -1115,18 +1209,28 @@ GET    /metrics
 - Embedding: `text-embedding-3-large`.
 - Embedding production از API؛ GPU شخصی خارج از production.
 - Chat/Embedding APIها OpenAI-compatible و قابل‌تنظیم.
-- Gateway: Portkey.
+- Gateway: Portkey — **image خودمان به‌عنوان app service لیارا**، نه SaaS شرکت Portkey.
+- استقرار: همه‌ی سرویس‌ها روی لیارا. توسعه‌ی محلی با Docker Desktop و `docker compose`. هیچ سرویسی self-host نیست.
+- Migration دیتابیس: **Alembic**، برای هر تغییر schema بدون استثنا.
 - Primary AI provider: AvalAI.
-- Observability LLM/RAG: Opik.
-- Runtime telemetry: OpenTelemetry.
+- مدل Chat و FAQ: `gemini-3.7-flash`.
+- **ابعاد embedding: `1536`** — نه ۳۰۷۲ (سقف ایندکس HNSW در pgvector برابر ۲۰۰۰ است).
+- Observability LLM/RAG: Opik به‌صورت **SaaS** — تنها وابستگی خارجی پروژه.
+- Runtime telemetry: **structured JSON logging + شمارنده در PostgreSQL**. OpenTelemetry خارج از Scope.
 - State: PostgreSQL.
 - Vector store: pgvector در PostgreSQL برای کاهش تعداد سرویس‌ها.
-- Queue/cache/rate limit: Redis.
-- Chat: bounded Agentic RAG، نه Agent آزاد.
-- تصاویر: metadata + alt/context embedding + selective Vision fallback.
-- CI/CD: GitHub Actions.
-- مقصد deployment: Liara.
-- زمان: کمتر از یک هفته، یک توسعه‌دهنده.
+- Queue/cache/rate limit/SSE relay: Redis.
+- Chat: bounded Agentic RAG با native function calling، نه Agent آزاد.
+- اجرای Chat: worker پشت صف، با relay توکن‌ها از طریق Redis Streams به SSE.
+- Web از **همان origin مربوط به API** سرو شود.
+- تصاویر: metadata + alt/context embedding. Vision fallback در P1.
+- FAQ: تولیدشده با LLM از روی مستندات، سپس curate توسط ادمین.
+- احراز هویت: فقط ادمین، HTTP Basic از environment. بدون login برای کاربر نهایی.
+- واحد آستانه: **similarity**، نه distance.
+- Evaluation: ۱۰ سؤال golden انسانی به‌عنوان دروازه + داور LLM با مدلی **متفاوت** از مدل تحت آزمون.
+- CI/CD: GitHub Actions — فقط `ci.yml` و `deploy.yml`.
+- مقصد deployment: Liara — **در ساعت اول**.
+- زمان: **حداکثر دو روز**، یک توسعه‌دهنده.
 - MCP، Skill، Chat، FAQ و dashboard همگی باید در دمو عملیاتی باشند.
 
 ---
@@ -1135,17 +1239,23 @@ GET    /metrics
 
 این موارد implementation blocker نیستند و باید از environment/config قابل‌تغییر باشند:
 
-- مدل Chat اصلی AvalAI.
+- **دامنه‌ی ingestion (`INGEST_SECTIONS`)** — شیر فشار اصلی زمان. پیش‌فرض: کل مستندات.
 - Provider و مدل fallback.
 - chunk size و overlap.
-- FAQ similarity threshold و top-k.
+- FAQ similarity threshold و top-k — threshold از پنل ادمین.
 - retrieval top-k و fusion weights.
-- reranking strategy.
-- token budget و timeout.
+- token budget، سقف tool call و timeout.
 - rate limit thresholds.
 - cache TTL.
-- Vision model برای fallback.
-- Grafana hosted/self-hosted در صورت اجرای P1.
+- `reasoning_effort` برای chat و برای تولید انبوه FAQ.
+- مدل داور evaluation.
+
+### هنوز باز — ولی مسدودکننده نیستند
+
+- **کیفیت پاسخ فارسی `gemini-3.7-flash`.** بنچمارک‌های اعلام‌شده روی وظایف کدنویسی انگلیسی هستند و چیزی درباره‌ی فارسی نمی‌گویند. قبل از قفل‌کردن، حدود ۱۰ سؤال به‌صورت دستی بررسی شود. اگر ضعیف بود فقط `LLM_MODEL` عوض می‌شود.
+- **در دسترس بودن `pg_trgm` روی لیارا.** تعیین می‌کند تطبیق فازی فارسی اضافه شود یا نه؛ `tsvector` به‌تنهایی برای ship کافی است.
+- **انتخاب نهایی provider دوم.** الزام فقط این است که یکی وجود داشته باشد و از شبکه‌ی استقرار در دسترس باشد.
+- **تعداد نهایی chunkها و پارامترهای ساخت HNSW.** فقط بعد از اولین ingestion کامل قابل اندازه‌گیری است.
 
 ---
 
@@ -1159,3 +1269,10 @@ GET    /metrics
 - shadcn/ui LLM Index: `https://ui.shadcn.com/llms.txt`
 - UI/UX Pro Max: `https://github.com/nextlevelbuilder/ui-ux-pro-max-skill`
 
+### اسناد داخلی پروژه
+
+- `docs/deployment.md` — زیرساخت، مدل‌ها، هزینه، پیکربندی، pre-pass مربوط به MDX، taxonomy خطاها.
+- `docs/eval/golden-set.md` — ۱۰ سؤال golden انسانی.
+- `AGENTS.md` — نقطه‌ی ورود canonical برای همه‌ی Coding Agentها.
+- `RULES.md` — قواعد مهندسی؛ بخش ۱ آن قاعده‌ی دقیق‌بودن خطاهاست.
+- `openspec/changes/add-docs-rescue-assistant/` — proposal، ۸ spec، design و tasks.

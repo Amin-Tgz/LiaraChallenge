@@ -10,7 +10,9 @@ context: |
     - AGENTS.md / RULES.md — engineering rules for all coding agents
 
   Stack: FastAPI + React/TypeScript/Vite/shadcn + PostgreSQL/pgvector + Redis +
-  self-hosted Portkey gateway. Deployed on Liara. Python deps via uv with committed lockfile.
+  a Portkey gateway container. Local development runs the stack on Docker Desktop via
+  docker compose; production runs the same services on Liara. Nothing is self-hosted.
+  Python deps via uv with committed lockfile. Alembic owns every schema change.
 
   Models via AvalAI (OpenAI-compatible): gemini-3.7-flash for chat and FAQ generation;
   text-embedding-3-large at 1536 dimensions (pgvector caps HNSW indexes at 2000 dims,
@@ -31,8 +33,9 @@ rules:
   tasks:
     - Each task carries verifiable acceptance criteria
     - Deployment tasks come first, not last — the Skill depends on MCP, which depends on a live API
-  spec:
+  specs:
     - Requirements must be observable from outside the system
+    - Every failure mode maps to a distinct error code from docs/deployment.md §10
 
 # Project context (optional)
 # This is shown to AI when creating artifacts.

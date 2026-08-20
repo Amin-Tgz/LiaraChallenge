@@ -62,7 +62,8 @@ npm ci && npm run lint && npm run typecheck && npm run test && npm run build
 
 ## Fast orientation
 
-- **Stack:** FastAPI + React/TypeScript/Vite + PostgreSQL/pgvector + Redis + self-hosted Portkey. Deployed on Liara.
+- **Stack:** FastAPI + React/TypeScript/Vite + PostgreSQL/pgvector + Redis + a Portkey gateway container. Local dev runs the stack on Docker Desktop via `docker compose`; production runs the same services on Liara. Nothing is self-hosted.
+- **Migrations:** Alembic, for every schema change. No `create_all`, no hand-written DDL.
 - **Models:** `gemini-3.7-flash` for chat and FAQ generation; `text-embedding-3-large` at **1536 dimensions** for embeddings. Both via AvalAI's OpenAI-compatible API.
 - **Why 1536:** pgvector caps HNSW indexes at 2,000 dimensions. The model's native 3072 cannot be indexed. See `docs/deployment.md` §2.
 - **Docs corpus:** `github.com/liara-cloud/docs` — Next.js Pages Router + `@next/mdx`, content at `src/pages/**/*.mdx`.

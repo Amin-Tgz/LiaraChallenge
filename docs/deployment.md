@@ -22,8 +22,8 @@
 | Embedding dimensions | **1536** via `dimensions` request param | ✅ AvalAI honors it |
 | Vector store | pgvector in PostgreSQL, `vector(1536)` + HNSW | ✅ extension available on Liara |
 | Max input length | 8191 tokens/request — chunks target 500–800 | ✅ per AvalAI model card |
-| Gateway | Portkey, **self-hosted** (single Node container) | decided |
-| LLM observability | Opik, **hosted free tier** — self-host is out of scope | decided |
+| Gateway | Portkey gateway **as a Liara service** (own container image), not Portkey's managed SaaS | decided |
+| LLM observability | Opik **SaaS** (free tier) — the only external dependency, nothing to deploy | decided |
 | Runtime telemetry | structured JSON logs + counters in Postgres. No OTel/Prometheus/Grafana in v1 | decided |
 | Chat execution | Redis queue + Worker, SSE relay via Redis | decided |
 | Web serving | React bundle served **from the API origin** (same-origin) | decided |
@@ -112,6 +112,27 @@ At 3072 with plain `vector`, every query degrades to a sequential scan. 1536 kee
 | Worker | 1 GB | Ingestion peak. Stream files — never load all 1,142 at once. |
 | Portkey | 0.5 GB | Single Node container. |
 
+### Environments: local development vs Liara
+
+Nothing is "self-hosted" in the sense of a machine you administer. There are exactly two environments, and every service exists in both:
+
+| | Local development | Production |
+|---|---|---|
+| Orchestration | Docker Desktop + `docker compose` | Liara services |
+| Postgres + pgvector | container from compose | Liara managed Postgres, Pgvector extension enabled |
+| Redis | container from compose | Liara managed Redis |
+| API + Web | container, hot reload | Liara app service |
+| Worker | container | Liara app service |
+| Portkey gateway | container from compose | Liara app service from the same image |
+| Opik | SaaS — same endpoint from both | SaaS |
+| Config | `.env` file, gitignored | Liara secrets panel |
+
+**The Portkey gateway is our own container image in both environments** — we run the open-source gateway rather than calling Portkey's managed SaaS. In development it comes up with `docker compose up`; in production Liara runs the same image as an app service.
+
+**Opik is the single external SaaS dependency.** Nothing about it is deployed; both environments call the same hosted endpoint. Running Opik ourselves is out of scope — its stack needs ClickHouse, MySQL, MinIO, and more.
+
+`docker-compose.yml` must bring the whole stack up locally with one command, so the dev/prod gap stays small and the same images ship to Liara.
+
 ### Why Web is merged into the API
 
 Two problems solved by one decision:
@@ -125,21 +146,67 @@ FastAPI mounts the Vite build output as static files with an SPA catch-all. API 
 
 ## 4. Liara provisioning
 
-Do these **before** day 1 — the pgvector toggle restarts the database, so enable it while the DB is empty.
+Run this at the **start of implementation**, not before — Liara bills hourly and idle services burn credit. Verified against CLI `@liara/cli/9.5.1`.
 
-1. **PostgreSQL**, 2 GB. In the panel → تنظیمات افزونه → enable **Pgvector** → ثبت تغییرات. Accept the restart.
-2. Verify version — `halfvec` needs ≥ 0.7.0, though the 1536-dim path doesn't depend on it:
+> ⚠️ **The CLI cannot enable database extensions.** `liara db` offers only `create`, `list`, `remove`, `resize`, `start`, `stop`, and `backup`. Enabling Pgvector is a **manual panel step** and there is no automated substitute. Because enabling it restarts the database, do it immediately after creation while the database is still empty.
+
+### Sizing and cost
+
+Plans and prices below are from `liara plan:list` on this account.
+
+| Service | Plan | RAM | تومان/ماه |
+|---|---|---:|---:|
+| PostgreSQL | `standard-base-g2` | 2 GB | 1,049,998 |
+| Redis | `small-g2` | 0.5 GB | 349,999 |
+| API + Web | `medium-g2` | 1 GB | 599,998 |
+| Worker | `medium-g2` | 1 GB | 599,998 |
+| Portkey gateway | `small-g2` | 0.5 GB | 349,999 |
+| **Total** | | **5 GB** | **≈ 2,950,000** |
+
+Roughly $25/month; hourly billing makes a 3-day competition run about 295,000 تومان (≈ $2.5).
+
+### Steps
+
+1. **Create PostgreSQL.**
+
+   ```bash
+   liara db:create --name liara-rescue-db --type postgres --plan standard-base-g2
+   ```
+
+2. **Enable Pgvector — manual, in the panel.** Open the database → تنظیمات افزونه → toggle **Pgvector** → ثبت تغییرات. Accept the restart. Do this before any data exists.
+
+3. **Verify the extension and its version.** `halfvec` needs ≥ 0.7.0; the 1536-dim path does not depend on it, so this is informational.
+
    ```sql
    CREATE EXTENSION IF NOT EXISTS vector;
    SELECT extversion FROM pg_extension WHERE extname = 'vector';
    ```
-3. Check the lexical fallback:
+
+4. **Check the lexical fallback** (open question in design.md):
+
    ```sql
    SELECT * FROM pg_available_extensions WHERE name = 'pg_trgm';
    ```
-4. **Redis**, 0.5 GB.
-5. Three app services: `api`, `worker`, `portkey`.
-6. Set all env vars via the Liara panel's secrets UI. **Never deploy a `.env` file.**
+
+5. **Create Redis.**
+
+   ```bash
+   liara db:create --name liara-rescue-redis --type redis --plan small-g2
+   ```
+
+6. **Create the three app services.**
+
+   ```bash
+   liara app:create --app liara-rescue-api     --platform docker --plan medium-g2
+   liara app:create --app liara-rescue-worker  --platform docker --plan small-g2
+   liara app:create --app liara-rescue-gateway --platform docker --plan small-g2
+   ```
+
+7. **Put database and Redis on the same private network as the apps** so connection URIs use the private network rather than the public internet. `db:create` and `app:create` both accept `--network`.
+
+8. **Set env vars through the Liara panel's secrets UI.** Never deploy a `.env` file.
+
+> **Account hygiene.** This account already hosts `royara-api`, `royara-db`, and `makeupapp`, which are unrelated to this project. Every name above is prefixed `liara-rescue-` so nothing collides, and no existing resource is touched.
 
 ---
 
@@ -234,6 +301,40 @@ Two sub-trees to watch when reviewing pre-pass output quality:
 
 ---
 
+## 6b. Backend project layout
+
+Adapted from the FastAPI Starter Kit reference (`github.com/esmaeil-taheri/FastAPI-Starter-Kit`), taking the parts that pay for themselves in two days and leaving the parts that don't.
+
+```text
+src/
+  core/            config (pydantic-settings), structured logging, error codes
+  api/v1/          routers registered centrally in routes.py
+  db/
+    models/        SQLAlchemy 2.x async models
+    session.py
+  services/        ingestion, retrieval, faq, agent, eval
+  mcp/             MCP tool definitions over the shared retrieval core
+  main.py          ASGI entry point, mounts the built web bundle
+alembic/           env.py + versions/    ← migrations, mandatory
+scripts/           ingest, generate-faq, run-eval, reindex
+tests/             unit/ and integration/
+docker/            Dockerfile.dev, Dockerfile.prod
+web/               React/Vite source; build output served by the API
+```
+
+**Adopted from the reference:**
+
+- **Alembic for every schema change.** No hand-written DDL, no `create_all` in application code. `alembic/env.py` reads the database URL from settings so dev and production share one migration path. Deployments apply migrations as a controlled step.
+- **Async SQLAlchemy 2.x with asyncpg** — matches FastAPI's concurrency model and matters here because retrieval and provider calls both block on I/O.
+- **`pydantic-settings` for typed configuration** loaded from environment, with `.env` used only locally.
+- **Central route registration** in one `routes.py` rather than scattered decorators.
+- **`scripts/`** for operational entry points — ingestion, FAQ generation, and evaluation are all long-running jobs that must be runnable outside a request.
+- **Split dev/prod Dockerfiles** and structured logging in `core/`.
+
+**Deliberately not adopted:** the full Clean Architecture split (`domain` / `application` / `infrastructure` / `presentation`) and a dependency-injection container. Both are sound for a long-lived multi-developer codebase; across two days and one developer they add indirection without buying testability we'd otherwise lack. RBAC and user management from the reference are irrelevant — there is no end-user auth here.
+
+---
+
 ## 7. MDX pre-pass
 
 Content is Next.js Pages Router + `@next/mdx` v3. Every file wraps content in `<Layout>` and imports custom components.
@@ -294,8 +395,6 @@ Confirmed rates, USD per 1M tokens:
 **Wall-clock is the only real constraint.** At Tier 4 (3,500 RPM / 5M TPM), the FAQ job is bound by generation latency, not limits: ~1,142 calls at ~20-way concurrency ≈ **8–15 minutes**, unattended. Embeddings finish in 1–2 minutes.
 
 **Cost levers, in order of effect:** `reasoning_effort=low` on bulk FAQ generation (reasoning bills as output, the most expensive line above) → prompt caching on the FAQ system prompt → chunk-count discipline.
-
-**Wall-clock, not cost, is the real constraint.** Full-corpus FAQ generation is ~1,142 requests; at RPM 10,000 with ~20-way concurrency that is **15–25 minutes** unattended. Embeddings finish in 1–2 minutes.
 
 ---
 
