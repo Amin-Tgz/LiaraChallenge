@@ -89,16 +89,16 @@
 
 ## 11. Rescue flow frontend
 
-- [ ] 11.1 Implement the landing view with a multi-line question input and immediate server-side persistence; verify the conversation row exists before retrieval starts
-- [ ] 11.2 Issue an anonymous session cookie and associate conversations; verify a reopened tab restores prior conversations
-- [ ] 11.3 Implement the related-questions view labeled as related questions, with solved/unresolved actions; verify below-threshold results show the not-found state and offer rescue tools
-- [ ] 11.4 Implement the rescue-tools view with plain-language descriptions of Skill, MCP, and Chat; verify moving between tools preserves the original question
-- [ ] 11.5 Implement chat view with streaming, Markdown, syntax-highlighted code blocks, per-block copy, links, and citations showing page title and section; verify each renders correctly
+- [x] 11.1 Implement the landing view with a multi-line question input and immediate server-side persistence; verify the conversation row exists before retrieval starts
+- [x] 11.2 Issue an anonymous session cookie and associate conversations; verify a reopened tab restores prior conversations
+- [x] 11.3 Implement the related-questions view labeled as related questions, with solved/unresolved actions; verify below-threshold results show the not-found state and offer rescue tools
+- [x] 11.4 Implement the rescue-tools view with plain-language descriptions of Skill, MCP, and Chat; verify moving between tools preserves the original question
+- [x] 11.5 Implement chat view with streaming, Markdown, syntax-highlighted code blocks, per-block copy, links, and citations showing page title and section; verify each renders correctly
 - [ ] 11.6 Render associated images beside their step or citation with alt-text fallback; verify a broken image URL leaves the answer intact
-- [ ] 11.7 Implement RTL layout with LTR code blocks and correct mixed Persian/Latin inline rendering; verify against fixtures containing both
-- [ ] 11.8 Surface queued, retrieving, generating, retrying, completed, and failed states in plain language; verify failures state their cause rather than a generic message
-- [ ] 11.9 Verify reload during generation restores conversation and job status without restarting generation
-- [ ] 11.10 Verify keyboard navigation, visible focus states, semantic labels, contrast, and mobile and desktop viewports
+- [x] 11.7 Implement RTL layout with LTR code blocks and correct mixed Persian/Latin inline rendering; verify against fixtures containing both
+- [x] 11.8 Surface queued, retrieving, generating, retrying, completed, and failed states in plain language; verify failures state their cause rather than a generic message
+- [x] 11.9 Verify reload during generation restores conversation and job status without restarting generation
+- [x] 11.10 Verify keyboard navigation, visible focus states, semantic labels, contrast, and mobile and desktop viewports
 
 ## 12. Skill
 
@@ -118,9 +118,9 @@
 ## 14. Platform operations
 
 - [ ] 14.1 Implement rate limiting by IP and session in Redis; verify exceeding the limit returns the rate-limited code
-- [ ] 14.2 Enforce maximum question length and history depth; verify oversized input is rejected with a message stating the limit
+- [x] 14.2 Enforce maximum question length and history depth; verify oversized input is rejected with a message stating the limit
 - [ ] 14.3 Implement secret redaction in logging; verify no key, cookie, or token appears in emitted logs
-- [ ] 14.4 Verify no provider credential is present in the delivered frontend bundle
+- [x] 14.4 Verify no provider credential is present in the delivered frontend bundle
 - [ ] 14.5 Attach correlation identifiers across API and worker logs; verify a single request is reconstructable from its logs
 - [ ] 14.6 Wire Opik tracing for retrieval and generation spans; verify making the telemetry backend unreachable does not fail a user request
 - [ ] 14.7 Record operational metrics including token usage and cost per request; verify cost is attributable to a single request

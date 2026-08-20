@@ -9,7 +9,8 @@ runs on a bare checkout.
 from __future__ import annotations
 
 import contextlib
-from collections.abc import AsyncIterator
+import os
+from collections.abc import AsyncIterator, Iterator
 
 import pytest
 import pytest_asyncio
@@ -26,10 +27,34 @@ from src.core.config import get_settings
 from src.services.jobs import QUEUE_KEY
 from src.services.redis_client import get_redis
 
+#: Integration tests use their own Redis logical database. Without this they
+#: share a queue with any worker running against the same broker — a locally
+#: running `docker compose` worker will BRPOP a test's job and answer it for
+#: real, which is both a flaky test and an unintended provider call.
+TEST_REDIS_DB = 15
+
+
+@pytest.fixture(scope="session", autouse=True)
+def isolated_redis_database() -> Iterator[None]:
+    base = get_settings().redis_url.rsplit("/", 1)[0]
+    previous = os.environ.get("REDIS_URL")
+    os.environ["REDIS_URL"] = f"{base}/{TEST_REDIS_DB}"
+    get_settings.cache_clear()
+    yield
+    if previous is None:
+        os.environ.pop("REDIS_URL", None)
+    else:
+        os.environ["REDIS_URL"] = previous
+    get_settings.cache_clear()
+
 
 @pytest_asyncio.fixture(scope="function")
 async def engine() -> AsyncIterator[AsyncEngine]:
-    eng = create_async_engine(get_settings().database_url, poolclass=None)
+    # `pool_pre_ping` matches src.db.session.get_engine. It matters: pre-ping
+    # turns any accidental lazy load in an async path into a MissingGreenlet
+    # here, exactly as it does in the worker, instead of silently succeeding in
+    # tests and failing in production.
+    eng = create_async_engine(get_settings().database_url, poolclass=None, pool_pre_ping=True)
     try:
         async with eng.connect() as conn:
             await conn.execute(text("SELECT 1"))

@@ -283,9 +283,18 @@ async def _handle_failure(
     failure is not. Retrying the latter would burn the budget re-earning the
     same rejection.
     """
+    # Read the identity *before* rolling back. A rollback expires every loaded
+    # instance, so touching `job.id` afterwards triggers a lazy refresh — and a
+    # lazy refresh is synchronous IO, which in this async worker raises
+    # MissingGreenlet from the pool's pre-ping. That turned the failure path
+    # itself into a failure and stranded the job in `generating` forever.
+    job_id = job.id
     await session.rollback()
-    refreshed = await session.get(RequestJob, job.id)
-    job = refreshed if refreshed is not None else job
+    refreshed = await session.get(RequestJob, job_id)
+    if refreshed is None:  # pragma: no cover — the row was committed before this
+        logger.error("job vanished while handling its failure", extra={"job_id": str(job_id)})
+        return JobOutcome(status=JobStatus.FAILED, error_code=code)
+    job = refreshed
 
     may_retry = transient and job.attempt < job.max_attempts
     if may_retry:

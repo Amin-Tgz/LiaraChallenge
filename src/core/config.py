@@ -98,7 +98,13 @@ class Settings(BaseSettings):
     # --- Agent bounds ---
     agent_max_tool_calls: int = 3
     agent_max_rewrites: int = 2
-    agent_token_budget: int = 8000
+    #: Must be able to hold one full retrieval round plus the answer. With
+    #: RETRIEVAL_TOP_K=8 and chunks bounded at CHUNK_MAX_TOKENS=1200, evidence
+    #: alone can reach ~9.6k tokens, so the previous 8000 made every
+    #: well-retrieved question terminate as AGENT_LIMIT_REACHED before it could
+    #: answer. The model's context is 1M; this bound exists to cap cost and
+    #: runaway loops, not to fit the window.
+    agent_token_budget: int = 32000
     agent_timeout_seconds: float = 60.0
     max_question_chars: int = 2000
     max_history_turns: int = 20

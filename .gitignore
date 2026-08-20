@@ -28,3 +28,6 @@ graphify-out/
 
 # Locally generated operational credentials
 secrets/
+
+# Playwright MCP session artifacts
+.playwright-mcp/

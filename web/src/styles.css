@@ -1,31 +1,443 @@
+/*
+ * The page is Persian and right-to-left; code is neither.
+ *
+ * Every rule that positions something uses logical properties
+ * (`margin-inline`, `padding-inline-start`, `border-inline-start`) so the
+ * layout mirrors correctly, while code elements are pinned to `dir: ltr` and
+ * bidi-isolated so a shell command is never reordered into something that
+ * looks right and runs wrong.
+ */
+
 :root {
   color-scheme: light dark;
   font-family: system-ui, 'Segoe UI', Tahoma, sans-serif;
-  line-height: 1.7;
+  line-height: 1.8;
+
+  --bg: #ffffff;
+  --fg: #16181d;
+  --muted: #55606e;
+  --accent: #0b5cd5;
+  --accent-fg: #ffffff;
+  --surface: #f4f6fa;
+  --border: #d3d9e3;
+  --danger: #a3131f;
+  --ok: #10633f;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #11141a;
+    --fg: #eef1f6;
+    --muted: #a8b2c1;
+    --accent: #6ea8ff;
+    --accent-fg: #0b1220;
+    --surface: #1a1f28;
+    --border: #2c3441;
+    --danger: #ff8f96;
+    --ok: #6bd3a3;
+  }
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  padding: 2rem 1rem;
+  padding: 0;
+  background: var(--bg);
+  color: var(--fg);
 }
 
 .shell {
-  max-width: 44rem;
+  max-width: 46rem;
   margin-inline: auto;
+  padding: 1.5rem 1rem 4rem;
+}
+
+.masthead {
+  border-block-end: 1px solid var(--border);
+  padding: 0.85rem 1rem;
+}
+
+.masthead a {
+  color: var(--fg);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+/* Keyboard users get to the content without tabbing the whole header. */
+.skip-link {
+  position: absolute;
+  inset-inline-start: -9999px;
+}
+
+.skip-link:focus {
+  inset-inline-start: 1rem;
+  top: 0.5rem;
+  z-index: 10;
+  background: var(--accent);
+  color: var(--accent-fg);
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.4rem;
+}
+
+h1 {
+  font-size: 1.6rem;
+  line-height: 1.4;
+}
+
+h2 {
+  font-size: 1.15rem;
 }
 
 .lead {
-  opacity: 0.8;
+  color: var(--muted);
 }
 
-.checks {
-  padding-inline-start: 1.25rem;
+/* --- Forms --- */
+
+label {
+  display: block;
+  font-weight: 600;
+  margin-block-end: 0.4rem;
 }
 
-/* Code is always left-to-right, even inside an RTL page. */
+textarea {
+  width: 100%;
+  font: inherit;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--bg);
+  color: var(--fg);
+  resize: vertical;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  margin-block-start: 0.75rem;
+  margin-inline-end: 0.5rem;
+  padding: 0.6rem 1.1rem;
+  border: 1px solid transparent;
+  border-radius: 0.5rem;
+  background: var(--accent);
+  color: var(--accent-fg);
+  /* 44px minimum target so it is reliably tappable on a phone. */
+  min-height: 2.75rem;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Focus must be visible for every interactive element, in both themes. */
+:where(a, button, textarea, [tabindex]):focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* --- Flow --- */
+
+.original-question {
+  background: var(--surface);
+  border-inline-start: 4px solid var(--accent);
+  border-radius: 0.4rem;
+  padding: 0.7rem 0.9rem;
+}
+
+.original-question .label {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.faq-list,
+.tools,
+.history ul,
+.transcript {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.faq-list > li,
+.tools > li {
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  padding: 0.9rem 1rem;
+  margin-block-end: 0.75rem;
+}
+
+.faq-question {
+  background: none;
+  color: var(--fg);
+  border: none;
+  text-align: start;
+  font-weight: 600;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.faq-answer {
+  border-block-start: 1px solid var(--border);
+  margin-block-start: 0.7rem;
+  padding-block-start: 0.7rem;
+}
+
+.resolution {
+  margin-block-start: 1.5rem;
+  border-block-start: 1px solid var(--border);
+  padding-block-start: 1rem;
+}
+
+.empty-state {
+  border: 1px dashed var(--border);
+  border-radius: 0.6rem;
+  padding: 1rem;
+}
+
+/* --- Chat --- */
+
+.turn {
+  margin-block-end: 1.25rem;
+  padding-block-end: 1.25rem;
+  border-block-end: 1px solid var(--border);
+}
+
+.turn-user .user-text {
+  background: var(--surface);
+  border-radius: 0.6rem;
+  padding: 0.7rem 0.9rem;
+  margin: 0;
+}
+
+.abstention {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.follow-up {
+  margin-block-start: 1.5rem;
+}
+
+/* --- Job status --- */
+
+.job-progress {
+  margin-block: 1rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 0.5rem;
+  background: var(--surface);
+}
+
+.job-label {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.job-detail {
+  margin: 0.4rem 0 0;
+  color: var(--muted);
+}
+
+.job-error {
+  color: var(--danger);
+}
+
+.error-code {
+  color: var(--muted);
+}
+
+.spinner {
+  width: 0.9rem;
+  height: 0.9rem;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+  flex: none;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Respect a user who asked the system to stop animating things. */
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}
+
+/* --- Citations and figures --- */
+
+.citations {
+  margin-block-start: 1rem;
+}
+
+.citations h3 {
+  font-size: 0.95rem;
+  margin-block-end: 0.4rem;
+}
+
+.citations ol {
+  margin: 0;
+  padding-inline-start: 1.3rem;
+}
+
+.citations .section {
+  color: var(--muted);
+}
+
+.figures figure {
+  margin: 1rem 0;
+}
+
+.figures img {
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+}
+
+figcaption {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/* --- Markdown and code --- */
+
+.markdown :where(p, ul, ol) {
+  overflow-wrap: anywhere;
+}
+
+.markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  display: block;
+  /* Wide tables scroll inside themselves rather than the page. */
+  overflow-x: auto;
+}
+
+.markdown th,
+.markdown td {
+  border: 1px solid var(--border);
+  padding: 0.4rem 0.6rem;
+}
+
+.code-block {
+  margin: 1rem 0;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  overflow: hidden;
+}
+
+.code-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  background: var(--surface);
+  padding: 0.35rem 0.6rem;
+  border-block-end: 1px solid var(--border);
+}
+
+.code-language {
+  color: var(--muted);
+  font-size: 0.85rem;
+  direction: ltr;
+}
+
+.copy {
+  margin: 0;
+  min-height: 2rem;
+  padding: 0.25rem 0.7rem;
+  font-size: 0.85rem;
+}
+
+/*
+ * A compact toolbar button is fine under a mouse, but 32px is below the 44px
+ * touch target a thumb needs. Grow it only where the pointer is coarse, so the
+ * desktop code header stays tight.
+ */
+@media (pointer: coarse) {
+  .copy {
+    min-height: 2.75rem;
+    padding-inline: 1rem;
+  }
+}
+
+/*
+ * Code is LTR inside an RTL document, and isolated so the bidi algorithm
+ * cannot pull a trailing bracket or flag to the wrong end of the line.
+ */
 code,
-pre {
+pre,
+.inline-code {
   direction: ltr;
   unicode-bidi: isolate;
   font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+}
+
+pre {
+  margin: 0;
+  padding: 0.8rem;
+  overflow-x: auto;
+  text-align: left;
+}
+
+.inline-code {
+  background: var(--surface);
+  border-radius: 0.3rem;
+  padding: 0.1rem 0.3rem;
+  font-size: 0.92em;
+}
+
+/* Minimal highlight palette; readable in both themes. */
+.hljs-keyword,
+.hljs-selector-tag {
+  color: #c0392b;
+}
+.hljs-string,
+.hljs-attr {
+  color: #1f7a4d;
+}
+.hljs-comment {
+  color: var(--muted);
+  font-style: italic;
+}
+.hljs-number,
+.hljs-literal {
+  color: #8250df;
+}
+
+@media (prefers-color-scheme: dark) {
+  .hljs-keyword,
+  .hljs-selector-tag {
+    color: #ff9d94;
+  }
+  .hljs-string,
+  .hljs-attr {
+    color: #7ee2b0;
+  }
+  .hljs-number,
+  .hljs-literal {
+    color: #d2a8ff;
+  }
+}
+
+@media (max-width: 32rem) {
+  .shell {
+    padding-inline: 0.85rem;
+  }
+
+  h1 {
+    font-size: 1.35rem;
+  }
 }
