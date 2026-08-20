@@ -23,7 +23,8 @@ from src.core.config import Settings, get_settings
 from src.core.errors import ErrorCode, RescueError
 from src.core.logging import get_logger
 from src.core.normalization import normalize_query
-from src.db.models import DocumentChunk, IndexVersion
+from src.db.models import DocumentChunk, IndexVersion, UsageEvent
+from src.db.models.enums import UsageEventType
 
 logger = get_logger(__name__)
 
@@ -105,6 +106,14 @@ class RetrievalIntent:
             "explicit_filters",
             {key: normalize_query(value) for key, value in self.explicit_filters.items() if value},
         )
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalTelemetry:
+    trace_id: str | None = None
+    session_id: uuid.UUID | None = None
+    conversation_id: uuid.UUID | None = None
+    job_id: uuid.UUID | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -577,3 +586,128 @@ async def hybrid_retrieve(
         },
     )
     return fused
+
+
+async def _record_retrieval_event(
+    executor: Executor,
+    *,
+    query: str,
+    results: Sequence[FusedRetrievalResult],
+    threshold: float,
+    telemetry: RetrievalTelemetry,
+    error_code: ErrorCode | None = None,
+) -> None:
+    """Best-effort telemetry; its failure never changes the user outcome."""
+    active_id = results[0].index_version_id if results else None
+    try:
+        await executor.execute(
+            UsageEvent.__table__.insert().values(
+                event_type=UsageEventType.RETRIEVAL.value,
+                trace_id=telemetry.trace_id,
+                session_id=telemetry.session_id,
+                conversation_id=telemetry.conversation_id,
+                job_id=telemetry.job_id,
+                index_version_id=active_id,
+                error_code=error_code.value if error_code is not None else None,
+                question=query,
+                payload={
+                    "similarity_threshold": threshold,
+                    "candidate_count": len(results),
+                    "top_similarity": results[0].similarity if results else None,
+                },
+            )
+        )
+    except SQLAlchemyError as err:
+        logger.warning(
+            "retrieval telemetry failed",
+            extra={
+                "error_code": error_code.value if error_code is not None else None,
+                "trace_id": telemetry.trace_id,
+                "cause": str(err),
+            },
+        )
+
+
+async def search_documentation(
+    executor: Executor,
+    query: str,
+    embeddings: EmbeddingProvider,
+    *,
+    settings: Settings | None = None,
+    top_k: int | None = None,
+    intent: RetrievalIntent | None = None,
+    telemetry: RetrievalTelemetry | None = None,
+) -> list[FusedRetrievalResult]:
+    """Public retrieval contract with thresholding and distinct failures."""
+    settings = settings or get_settings()
+    telemetry = telemetry or RetrievalTelemetry()
+    try:
+        results = await hybrid_retrieve(
+            executor,
+            query,
+            embeddings,
+            settings=settings,
+            top_k=top_k,
+            intent=intent,
+        )
+    except RescueError as err:
+        await _record_retrieval_event(
+            executor,
+            query=query,
+            results=[],
+            threshold=settings.retrieval_similarity_threshold,
+            telemetry=telemetry,
+            error_code=err.code,
+        )
+        logger.warning(
+            "documentation retrieval failed",
+            extra={
+                "error_code": err.code.value,
+                "trace_id": telemetry.trace_id,
+                **err.context,
+            },
+        )
+        raise
+
+    above_threshold = [
+        result for result in results if result.similarity >= settings.retrieval_similarity_threshold
+    ]
+    if not above_threshold:
+        code = ErrorCode.NO_RESULTS_ABOVE_THRESHOLD
+        await _record_retrieval_event(
+            executor,
+            query=query,
+            results=results,
+            threshold=settings.retrieval_similarity_threshold,
+            telemetry=telemetry,
+            error_code=code,
+        )
+        logger.info(
+            "no documentation results above similarity threshold",
+            extra={
+                "error_code": code.value,
+                "trace_id": telemetry.trace_id,
+                "similarity_threshold": settings.retrieval_similarity_threshold,
+                "top_similarity": results[0].similarity if results else None,
+            },
+        )
+        raise RescueError(
+            code,
+            detail=(
+                "active index searched successfully; no candidate reached "
+                f"similarity {settings.retrieval_similarity_threshold}"
+            ),
+            context={
+                "trace_id": telemetry.trace_id,
+                "index_version": str(results[0].index_version_id) if results else None,
+            },
+        )
+
+    await _record_retrieval_event(
+        executor,
+        query=query,
+        results=above_threshold,
+        threshold=settings.retrieval_similarity_threshold,
+        telemetry=telemetry,
+    )
+    return above_threshold
