@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncConnection
 
-from src.db.models import AnonymousSession, FaqItem, Feedback
+from src.db.models import AnonymousSession, FaqItem, Feedback, UsageEvent
 from src.db.models.enums import FaqStatus, FeedbackOutcome
 from src.db.session import get_session
 from src.main import create_app
@@ -76,6 +76,18 @@ async def test_resolved_and_unresolved_faq_feedback_are_queryable(
         "https://docs.liara.ir/paas/page-0",
         "https://docs.liara.ir/paas/page-1",
     ]
+    resolution_events = (
+        await migrated.execute(
+            select(UsageEvent).where(
+                UsageEvent.event_type == "faq_resolution",
+                UsageEvent.question.startswith(question_prefix),
+            )
+        )
+    ).all()
+    assert {event.payload["outcome"] for event in resolution_events} == {
+        "resolved",
+        "unresolved",
+    }
 
 
 async def test_feedback_endpoint_persists_unresolved_gap_and_offers_rescue_tools(

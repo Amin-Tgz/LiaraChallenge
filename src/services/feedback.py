@@ -13,8 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 from src.core.errors import ErrorCode, RescueError
 from src.core.logging import get_logger
 from src.core.normalization import normalize_query
-from src.db.models import AnonymousSession, Conversation, FaqItem, Feedback
-from src.db.models.enums import FeedbackOutcome, FeedbackStage
+from src.db.models import AnonymousSession, Conversation, FaqItem, Feedback, UsageEvent
+from src.db.models.enums import FeedbackOutcome, FeedbackStage, UsageEventType
 
 logger = get_logger(__name__)
 Executor = AsyncSession | AsyncConnection
@@ -98,6 +98,23 @@ async def record_faq_feedback(
                     dict.fromkeys(source_by_id[faq_id] for faq_id in presented_faq_ids)
                 ),
                 note=note,
+            )
+        )
+        # Resolution is an analytics signal in addition to the durable feedback
+        # record. Keep it in the same transaction so the dashboard cannot drift.
+        await executor.execute(
+            UsageEvent.__table__.insert().values(
+                event_type=UsageEventType.FAQ_RESOLUTION.value,
+                session_id=session_id,
+                conversation_id=conversation_id,
+                question=question,
+                payload={
+                    "outcome": outcome.value,
+                    "presented_faq_ids": [str(faq_id) for faq_id in presented_faq_ids],
+                    "source_urls": list(
+                        dict.fromkeys(source_by_id[faq_id] for faq_id in presented_faq_ids)
+                    ),
+                },
             )
         )
     except RescueError:
