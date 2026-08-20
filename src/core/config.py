@@ -62,6 +62,22 @@ class Settings(BaseSettings):
     chunk_min_tokens: int = 120
     chunk_max_tokens: int = 1200
     ingest_discard_ratio_threshold: float = 0.35
+    #: Where the docs checkout is kept between runs, so an unchanged upstream
+    #: costs a fetch rather than a clone.
+    docs_cache_dir: str = ".cache/docs"
+    #: Public site the citations point at. Not the repository URL.
+    docs_base_url: str = "https://docs.liara.ir"
+    #: Inputs per embedding request. The model accepts 8191 tokens per input, so
+    #: this is not a context limit — it is how much work a single retry has to
+    #: repeat. The route to the provider has been observed to drop mid-run, and
+    #: a smaller batch loses less to each interruption.
+    embedding_batch_size: int = 16
+    #: Per-request ceiling for an embedding call. Generous on purpose: a request
+    #: that is merely slow must not be retried as though it had failed.
+    embedding_timeout_seconds: float = 120.0
+    #: How many superseded index versions survive an activation. At least one,
+    #: or rollback has nothing to roll back to.
+    index_retention_count: int = 2
 
     # --- Retrieval ---
     faq_similarity_threshold: float = 0.4

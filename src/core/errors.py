@@ -26,6 +26,9 @@ class ErrorCode(StrEnum):
     ALL_PROVIDERS_UNAVAILABLE = "ALL_PROVIDERS_UNAVAILABLE"
     RATE_LIMITED = "RATE_LIMITED"
     NO_EVIDENCE = "NO_EVIDENCE"
+    DOCUMENT_PARSE_FAILED = "DOCUMENT_PARSE_FAILED"
+    INGESTION_SOURCE_UNAVAILABLE = "INGESTION_SOURCE_UNAVAILABLE"
+    INDEX_VALIDATION_FAILED = "INDEX_VALIDATION_FAILED"
     INPUT_TOO_LARGE = "INPUT_TOO_LARGE"
     UNAUTHORIZED = "UNAUTHORIZED"
     INVALID_REQUEST = "INVALID_REQUEST"
@@ -114,6 +117,49 @@ ERROR_SPECS: dict[ErrorCode, ErrorSpec] = {
             "حدس نزنم. این سؤال برای بهبود مستندات ثبت شد."
         ),
         operator_action="Feed to documentation-gap analytics.",
+        transient=False,
+    ),
+    ErrorCode.DOCUMENT_PARSE_FAILED: ErrorSpec(
+        code=ErrorCode.DOCUMENT_PARSE_FAILED,
+        http_status=500,
+        message_fa=(
+            "یکی از صفحه‌های مستندات قابل پردازش نبود و ایندکس نشد. "
+            "این یک خطای پردازش مستندات است، نه نبود پاسخ."
+        ),
+        operator_action=(
+            "The MDX pre-pass produced no text for a non-empty document — check that "
+            "path's discarded_char_ratio and the unrecognized tags in the ingestion "
+            "report; upstream has probably introduced a component the transform table "
+            "misses."
+        ),
+        transient=False,
+    ),
+    ErrorCode.INGESTION_SOURCE_UNAVAILABLE: ErrorSpec(
+        code=ErrorCode.INGESTION_SOURCE_UNAVAILABLE,
+        http_status=503,
+        message_fa=(
+            "دریافت مستندات از مخزن اصلی ممکن نشد، بنابراین ایندکس به‌روزرسانی نشد. "
+            "پاسخ‌ها همچنان از آخرین نسخه‌ی سالم ارائه می‌شوند."
+        ),
+        operator_action=(
+            "The docs repository could not be cloned, fetched, or read, or the "
+            "configured scope matched no files. The previously active index is "
+            "untouched — check DOCS_REPO_URL, DOCS_REPO_BRANCH, and INGEST_SECTIONS."
+        ),
+        transient=True,
+    ),
+    ErrorCode.INDEX_VALIDATION_FAILED: ErrorSpec(
+        code=ErrorCode.INDEX_VALIDATION_FAILED,
+        http_status=500,
+        message_fa=(
+            "نسخه‌ی جدید ایندکس اعتبارسنجی نشد و فعال نشد. "
+            "پاسخ‌ها از نسخه‌ی سالم قبلی ارائه می‌شوند."
+        ),
+        operator_action=(
+            "A freshly built index failed its smoke checks and was not activated; "
+            "the prior version still serves. Read index_versions.validation_report "
+            "for the failed check."
+        ),
         transient=False,
     ),
     ErrorCode.INPUT_TOO_LARGE: ErrorSpec(

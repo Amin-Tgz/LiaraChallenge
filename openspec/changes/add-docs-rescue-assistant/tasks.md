@@ -20,34 +20,34 @@
 
 ## 3. Data model
 
-- [ ] 3.1 Define schema for sessions, conversations, messages, request_jobs, feedback, faq_items, documents, document_chunks, index_versions, image_assets, usage_events; verify Alembic generates and applies the migration
-- [ ] 3.2 Add `vector(1536)` column and HNSW index on document_chunks; verify `EXPLAIN` on a similarity query shows index usage rather than a sequential scan
-- [ ] 3.3 Add a unique constraint on the job idempotency key; verify duplicate insert raises rather than creating a second row
+- [x] 3.1 Define schema for sessions, conversations, messages, request_jobs, feedback, faq_items, documents, document_chunks, index_versions, image_assets, usage_events; verify Alembic generates and applies the migration
+- [x] 3.2 Add `vector(1536)` column and HNSW index on document_chunks; verify `EXPLAIN` on a similarity query shows index usage rather than a sequential scan
+- [x] 3.3 Add a unique constraint on the job idempotency key; verify duplicate insert raises rather than creating a second row
 - [x] 3.4 Implement the error-code enumeration from docs/deployment.md §10; verify every member has a distinct code and Persian message via a table-driven test
 
 ## 4. Persian normalization
 
-- [ ] 4.1 Implement the normalizer (ی/ي, ک/ك, ZWNJ, digit forms, spacing) as a single pure versioned function; verify unit tests cover each transformation class
-- [ ] 4.2 Assert the same function is used at index time and query time; verify a test fails if either path bypasses it
+- [x] 4.1 Implement the normalizer (ی/ي, ک/ك, ZWNJ, digit forms, spacing) as a single pure versioned function; verify unit tests cover each transformation class
+- [x] 4.2 Assert the same function is used at index time and query time; verify a test fails if either path bypasses it
 
 ## 5. MDX pre-pass and chunking
 
-- [ ] 5.1 Implement the JSX pre-pass per the transform table in docs/deployment.md §7, matching on tag names not import paths; verify `<Section id title />` becomes a heading carrying its anchor
-- [ ] 5.2 Verify against fixtures from at least 5 real documents across different sections that no `<` or `{` survives into embedded text
-- [ ] 5.3 Emit a discarded-character ratio per file and flag files above threshold; verify the metric appears in ingestion output
-- [ ] 5.4 Parse cleaned Markdown to AST with mistune and implement section-aware chunking; verify code blocks stay with adjacent prose and steps stay with their images
-- [ ] 5.5 Extract chunk metadata including source URL, heading anchor, breadcrumbs, service/runtime/framework, and images; verify a citation resolves to `{source_url}#{anchor}` for a known document
-- [ ] 5.6 Merge undersized chunks and split oversized ones against configured bounds; verify no stored chunk falls outside them
+- [x] 5.1 Implement the JSX pre-pass per the transform table in docs/deployment.md §7, matching on tag names not import paths; verify `<Section id title />` becomes a heading carrying its anchor
+- [x] 5.2 Verify against fixtures from at least 5 real documents across different sections that no `<` or `{` survives into embedded text
+- [x] 5.3 Emit a discarded-character ratio per file and flag files above threshold; verify the metric appears in ingestion output
+- [x] 5.4 Parse cleaned Markdown to AST with mistune and implement section-aware chunking; verify code blocks stay with adjacent prose and steps stay with their images
+- [x] 5.5 Extract chunk metadata including source URL, heading anchor, breadcrumbs, service/runtime/framework, and images; verify a citation resolves to `{source_url}#{anchor}` for a known document
+- [x] 5.6 Merge undersized chunks and split oversized ones against configured bounds; verify no stored chunk falls outside them
 
 ## 6. Ingestion pipeline
 
-- [ ] 6.1 Clone the docs repository at the configured branch and record the commit SHA; verify the SHA is stored on the index version
-- [ ] 6.2 Apply the configured section allowlist and exclude globs; verify narrowing the config excludes those documents without code change
-- [ ] 6.3 Detect added, modified, and deleted files against the active index; verify a no-change run exits without generating embeddings
-- [ ] 6.4 Generate embeddings in batches at 1536 dimensions via the gateway; verify the returned vector length is 1536 and the dimension is recorded on the index version
-- [ ] 6.5 Implement index version creation, smoke validation, and atomic activation with retention of the previous version; verify a failed validation leaves the prior index active
-- [ ] 6.6 Implement index rollback to a prior version; verify reactivation works without re-running ingestion
-- [ ] 6.7 **Run full ingestion against the real corpus and verify an active index exists and `/health/ready` turns positive**
+- [x] 6.1 Clone the docs repository at the configured branch and record the commit SHA; verify the SHA is stored on the index version
+- [x] 6.2 Apply the configured section allowlist and exclude globs; verify narrowing the config excludes those documents without code change
+- [x] 6.3 Detect added, modified, and deleted files against the active index; verify a no-change run exits without generating embeddings
+- [x] 6.4 Generate embeddings in batches at 1536 dimensions via the gateway; verify the returned vector length is 1536 and the dimension is recorded on the index version
+- [x] 6.5 Implement index version creation, smoke validation, and atomic activation with retention of the previous version; verify a failed validation leaves the prior index active
+- [x] 6.6 Implement index rollback to a prior version; verify reactivation works without re-running ingestion
+- [x] 6.7 **Run full ingestion against the real corpus and verify an active index exists and `/health/ready` turns positive**
 
 ## 7. Retrieval
 

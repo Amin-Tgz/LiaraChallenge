@@ -1,0 +1,40 @@
+{
+  "_comment": "Verbatim copies from github.com/liara-cloud/docs at the commit below. They are fixtures precisely because they are unedited: the pre-pass encodes assumptions about a repository we do not control, and a hand-tidied sample would stop testing that. Refresh by re-copying from the recorded upstream_path and updating source_commit.",
+  "repository": "https://github.com/liara-cloud/docs",
+  "branch": "master",
+  "source_commit": "dbb7430b1abc5bf92ccca3538f45c54bdc632fa8",
+  "documents": {
+    "paas__django__how-tos__create-app.mdx": {
+      "source_path": "src/pages/paas/django/how-tos/create-app.mdx",
+      "source_url": "https://docs.liara.ir/paas/django/how-tos/create-app"
+    },
+    "dbaas__postgresql__how-tos__connect-via-platform__django.mdx": {
+      "source_path": "src/pages/dbaas/postgresql/how-tos/connect-via-platform/django.mdx",
+      "source_url": "https://docs.liara.ir/dbaas/postgresql/how-tos/connect-via-platform/django"
+    },
+    "iaas__about.mdx": {
+      "source_path": "src/pages/iaas/about.mdx",
+      "source_url": "https://docs.liara.ir/iaas/about"
+    },
+    "overview__about.mdx": {
+      "source_path": "src/pages/overview/about.mdx",
+      "source_url": "https://docs.liara.ir/overview/about"
+    },
+    "ai__faq.mdx": {
+      "source_path": "src/pages/ai/faq.mdx",
+      "source_url": "https://docs.liara.ir/ai/faq"
+    },
+    "references__cli__add-account.mdx": {
+      "source_path": "src/pages/references/cli/add-account.mdx",
+      "source_url": "https://docs.liara.ir/references/cli/add-account"
+    },
+    "one-click-apps__ackee__quick-start.mdx": {
+      "source_path": "src/pages/one-click-apps/ackee/quick-start.mdx",
+      "source_url": "https://docs.liara.ir/one-click-apps/ackee/quick-start"
+    },
+    "ai__ai-sdk-ui__about.mdx": {
+      "source_path": "src/pages/ai/ai-sdk-ui/about.mdx",
+      "source_url": "https://docs.liara.ir/ai/ai-sdk-ui/about"
+    }
+  }
+}

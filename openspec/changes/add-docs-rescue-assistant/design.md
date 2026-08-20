@@ -145,6 +145,6 @@ Rollback: redeploy the prior image. Index rollback is independent — reactivati
 
 ## Open Questions
 
-- Whether `pg_trgm` is available on Liara's managed Postgres. Determines whether fuzzy Persian lexical matching is added; `tsvector` alone is sufficient to ship, so this changes neither the specs nor the task breakdown.
+- Whether `pg_trgm` is available on Liara's managed Postgres. Determines whether fuzzy Persian lexical matching is added; `tsvector` alone is sufficient to ship, so this changes neither the specs nor the task breakdown. **Partially answered:** it is available (1.6) on the local `pgvector/pgvector:0.8.0-pg17` image, so the local and production answers may differ — the Liara side is still unverified and remains task 1.4.
 - Which secondary provider to configure for fallback. The gateway makes this configuration; the requirement is only that one exists and is reachable from the deployment network.
-- Final chunk count and the resulting HNSW build parameters — measurable only after the first full ingestion run.
+- ~~Final chunk count and the resulting HNSW build parameters — measurable only after the first full ingestion run.~~ **Answered.** The first full run at upstream commit `dbb7430` produced **3,776 chunks** across 1,143 documents (11 sections; `tv` contains no `.mdx`), token range 120–1,149, 376 images. Default HNSW parameters (`m=16`, `ef_construction=64`) are adequate: at this size the planner actually prefers a sequential scan, and a forced index scan is no faster — 13.3 ms against 14.4 ms median for top-8 similarity. The index earns its place as the corpus grows, not today. Revisit only if chunk count grows by an order of magnitude.

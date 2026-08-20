@@ -215,6 +215,11 @@ Roughly $25/month; hourly billing makes a 3-day competition run about 295,000 ت
 `.env` is for local development only and must be listed in `.gitignore`. Production values live in Liara secrets.
 
 ```env
+# --- Runtime ---
+APP_ENV=local
+LOG_LEVEL=INFO
+WEB_DIST_DIR=web/dist
+
 # --- Chat LLM ---
 LLM_BASE_URL=https://api.avalai.ir/v1
 LLM_API_KEY=<from-liara-secrets>
@@ -253,18 +258,34 @@ INGEST_SECTIONS=*
 INGEST_EXCLUDE_GLOBS=
 CHUNK_TARGET_TOKENS=700
 CHUNK_OVERLAP_TOKENS=80
+CHUNK_MIN_TOKENS=120           # below this, a chunk is merged with its neighbour
+CHUNK_MAX_TOKENS=1200          # above this, a chunk is split
+INGEST_DISCARD_RATIO_THRESHOLD=0.35   # §7 guardrail: flag a file for review above this
+DOCS_CACHE_DIR=.cache/docs     # checkout kept between runs; unchanged upstream costs a fetch
+DOCS_BASE_URL=https://docs.liara.ir   # public site citations point at, not the repo
+EMBEDDING_BATCH_SIZE=16        # work a single retry repeats, not a context limit
+EMBEDDING_TIMEOUT_SECONDS=120  # a merely-slow request must not be retried as a failure
+INDEX_RETENTION_COUNT=2        # superseded versions kept; at least 1 or rollback has no target
 
 # --- Retrieval ---
 FAQ_SIMILARITY_THRESHOLD=0.4   # cosine SIMILARITY, not pgvector distance
 FAQ_TOP_K=5
 RETRIEVAL_TOP_K=8
+RETRIEVAL_SIMILARITY_THRESHOLD=0.25   # below this is NO_RESULTS_ABOVE_THRESHOLD
 RRF_K=60
+INDEX_STALE_AFTER_DAYS=14      # past this, answers carry INDEX_STALE
 
-# --- Agent bounds ---
+# --- Agent bounds: enforced in the loop, never merely requested in the prompt ---
 AGENT_MAX_TOOL_CALLS=3
 AGENT_MAX_REWRITES=2
 AGENT_TOKEN_BUDGET=8000
 AGENT_TIMEOUT_SECONDS=60
+MAX_QUESTION_CHARS=2000
+MAX_HISTORY_TURNS=20
+
+# --- Rate limiting ---
+RATE_LIMIT_PER_IP_PER_MINUTE=30
+RATE_LIMIT_PER_SESSION_PER_MINUTE=15
 
 # --- Admin ---
 ADMIN_USERNAME=
@@ -343,24 +364,43 @@ Content is Next.js Pages Router + `@next/mdx` v3. Every file wraps content in `<
 >
 > The upside: `id` and `title` are explicit, so `heading_anchor` and `section` metadata come free and citations deep-link as `{source_url}#{id}`.
 
+> **Equally critical, and the correction that cost the most:** the corpus contains **zero Markdown code fences**. All 3,731 code blocks are ``<Highlight className="lang">{`…`}</Highlight>`` — the code lives *inside* a JSX expression container. A rule that drops `{ … }` blocks wholesale discards every command, every `liara.json`, and every configuration snippet in the documentation, and does so without erroring. Expression blocks are dropped only when they are computed; a bare string or template literal is content and is kept.
+
 Two stages: a JSX pre-pass producing clean Markdown, then `mistune` in AST mode (`create_markdown(renderer=None)`) for section-aware chunking.
 
-| Source construct | Transform |
-|---|---|
-| `import …` / `export …` | drop |
-| `<Layout>` wrapper, `<Head>…</Head>` | unwrap; drop head |
-| `<Section id="X" title="Y" />` | `## Y` + record anchor `X` |
-| `<Step number="…">…</Step>` | keep content, mark as step (stays in one chunk with its image) |
-| `<Tabs>` | flatten, one block per tab label |
-| `<Alert>` `<Important>` `<Highlight>` | keep inner text as blockquote |
-| `<Card>` `<Button>` `<PlatformIcon>` | drop — navigation only |
-| `{ … }` JS expression blocks | drop |
-| `<a href="X" className="…">Y</a>` | `[Y](X)` — **keep the link**, drop the styling |
-| `<div>` `<b>` `<hr className=…>` | strip tag, keep text |
+Rules are keyed on the tag name, dispatched by JSX's own convention — **capitalized is a component, lowercase is HTML** — so `<Section>` (a heading) and `<section>` (a wrapper), or `<Link>` (next/link) and `<link>` (a void metadata element), can never be conflated.
+
+| Source construct | Uses | Transform |
+|---|---:|---|
+| `import …` / `export …` | 1,143 files | drop (multi-line brace forms included) |
+| `<Layout>` wrapper | 1,143 | unwrap |
+| `<Head>…</Head>`, `<meta>`, `<title>` | 1,144 | drop; keep `<title>` as the document title. Excluded from the discard ratio — it is metadata, not content |
+| `<Section id="X" title="Y" />` | 1,301 | `## Y` + record anchor `X`; `headingTag="h3"` → `### Y` |
+| `` <Highlight className="L">{`…`}</Highlight> `` | 3,731 | fenced code block in language `L` — **not** a blockquote |
+| `<Important>…</Important>` | 8,666 | inline code span — it is an inline badge, **not** a callout |
+| `<Alert variant="…">…</Alert>` | 1,595 | blockquote — the only true callout of the three |
+| `<Link href="X">Y</Link>` | 808 | `[Y](X)` |
+| `<a href="X" className="…">Y</a>` | — | `[Y](X)` — **keep the link**, drop the styling |
+| `<Tabs tabs={[{label}]} content={[…]} />` | 397 | flatten: `**label**` then the rendered tab body. Nests inside itself |
+| `<Step steps={[{step, content}]} />` | 254 | `**n**` + rendered content; the whole block is recorded as one atomic region so it stays in one chunk with its images and code |
+| `<HighlightTabs tabs={[{label, language, code}]} />` | 20 | `**label**` + a fence per tab |
+| `<Table headers={[…]} data={[[…]]} />` | 78 | Markdown table |
+| `<QuestionBox id question answer={…} />` | 5 | `### question` + rendered answer; `id` is the anchor |
+| `<TickIcon>` `<TickBadge>` | 344 | `✔` — in a `<Table>` support matrix these *are* the cell value |
+| `<Card>` `<Button>` `<PlatformIcon>` `<Asciinema>` `<Go*>` icons | ~1,100 | drop — navigation and decoration only |
+| `<video>` `<iframe>` `<audio>` | 415 | drop — no text and no alt attribute |
+| `{ /* … */ }` JSX comments | — | drop, and **exclude from the discard ratio** — content upstream deliberately disabled is not content lost |
+| `{ … }` computed expressions (`.map()` card grids, icon props) | — | drop, and count against the discard ratio |
+| `{ "…" }` / ``{ `…` }`` literals | — | **keep** — this is where all code and much prose lives |
+| `<div>` `<p>` `<b>` `<hr className=…>` `<ul>` `<img>` | — | strip tag, keep text; `<img>` → `![alt](src)` and record the image |
 
 > **Match on the JSX tag name, never the import path.** Verified across three files: `paas/about.mdx` imports `Tabs` from `@/components/Common/tabs` while `paas/django/getting-started.mdx` imports it from `@/components/Common/tab` (singular). The repo is internally inconsistent. Tag names are stable; import paths are not.
 
-**Guardrail metric.** Log the percentage of characters discarded per file. Liara owns this repo and can add components at any time; without this metric a new component degrades retrieval silently. Alert above a threshold. Assert in tests that no `<` or `{` survives into embedded text.
+**Guardrail metric.** Record the proportion of *content* characters discarded per file — content meaning text and expression bodies, not tag markup, imports, or `<Head>`. Liara owns this repo and can add components at any time; without this metric a new component degrades retrieval silently. Files above `INGEST_DISCARD_RATIO_THRESHOLD` are flagged for review, and every unrecognized tag name is returned with its frequency alongside the ratio.
+
+Measured over all 1,143 documents at commit `dbb7430`: 76% of files discard nothing, median 0.000, p90 0.428, mean 0.090; 123 files (10.8%) exceed the configured 0.35. The flagged population is dominated by section index pages (`*/about.mdx`) that are almost entirely `.map()`-generated navigation cards with little prose — a true reading, not a defect. The one genuine content loss found is `ai/hugging-face.mdx`, whose list of supported models is `.map()`ed over an `export const` the pre-pass strips.
+
+**Test assertion.** No `<` or `{` may survive into the text destined for embedding, measured on prose — fenced and inline code are exempt, because `<LIARA_API_KEY>`, `${VAR}`, and JSON braces are content that must reach the embedding intact. Corpus-wide, four documents still contain a bare `<` in prose: three are version comparisons inside tab labels (`redis < 7`, `Laravel < 11`, `NextJS < 12.2`) and one is malformed upstream markup (`< div className="h-2" />` in `ai/foundations/tools.mdx`). None is unstripped JSX; the invariant that must hold everywhere is that no `<` is ever glued to an identifier or a slash.
 
 ---
 
@@ -454,6 +494,9 @@ Every failure carries a stable machine code, a Persian user-facing message that 
 | `ALL_PROVIDERS_UNAVAILABLE` | Every provider down | «سرویس پاسخ‌گویی موقتاً در دسترس نیست. سؤال شما ذخیره شد.» | Check Portkey circuit state |
 | `RATE_LIMITED` | Local rate limit hit | «تعداد درخواست‌ها زیاد است. لطفاً کمی صبر کنید.» | Expected |
 | `NO_EVIDENCE` | Retrieval succeeded, evidence insufficient to answer | Agent abstains and says so explicitly | Feed to docs-gap analytics |
+| `INGESTION_SOURCE_UNAVAILABLE` | Docs repo unreachable/unreadable, or scope matched no files | «دریافت مستندات از مخزن اصلی ممکن نشد، بنابراین ایندکس به‌روزرسانی نشد. پاسخ‌ها همچنان از آخرین نسخه‌ی سالم ارائه می‌شوند.» | Check `DOCS_REPO_URL`, `DOCS_REPO_BRANCH`, `INGEST_SECTIONS`; prior index untouched |
+| `INDEX_VALIDATION_FAILED` | New index failed smoke validation and was not activated | «نسخه‌ی جدید ایندکس اعتبارسنجی نشد و فعال نشد. پاسخ‌ها از نسخه‌ی سالم قبلی ارائه می‌شوند.» | Read `index_versions.validation_report` for the failed check |
+| `DOCUMENT_PARSE_FAILED` | MDX pre-pass produced no text for a non-empty source document | «یکی از صفحه‌های مستندات قابل پردازش نبود و ایندکس نشد. این یک خطای پردازش مستندات است، نه نبود پاسخ.» | Inspect that document's `discarded_char_ratio` and the unrecognized tags in the ingestion report; upstream likely added a component the §7 table misses |
 
 `NO_ACTIVE_INDEX` (system broken) and `NO_RESULTS_ABOVE_THRESHOLD` (working correctly, real docs gap) must **never** share a message. One is an outage; the other is your product's most valuable data.
 

@@ -62,6 +62,7 @@ services:
       - ./src:/app/src
       - ./alembic:/app/alembic
       - ./scripts:/app/scripts
+      - ./tests:/app/tests
       - ./web/dist:/app/web/dist
     depends_on:
       postgres: {condition: service_healthy}
