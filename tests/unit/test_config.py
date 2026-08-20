@@ -30,6 +30,20 @@ def test_faq_generation_concurrency_must_be_positive() -> None:
 @pytest.mark.parametrize(
     ("overrides", "message"),
     [
+        ({"agent_max_tool_calls": -1}, "must be non-negative"),
+        ({"agent_max_rewrites": -1}, "must be non-negative"),
+        ({"agent_token_budget": 0}, "must be positive"),
+        ({"agent_timeout_seconds": 0}, "must be positive"),
+    ],
+)
+def test_agent_bounds_reject_invalid_values(overrides: dict[str, object], message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        _settings(**overrides)
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
         ({"rrf_k": 0}, "RRF_K must be positive"),
         ({"rrf_dense_weight": -1}, "ranking weights must be non-negative"),
         ({"rrf_lexical_weight": -1}, "ranking weights must be non-negative"),

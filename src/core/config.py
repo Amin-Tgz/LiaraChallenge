@@ -99,7 +99,7 @@ class Settings(BaseSettings):
     agent_max_tool_calls: int = 3
     agent_max_rewrites: int = 2
     agent_token_budget: int = 8000
-    agent_timeout_seconds: int = 60
+    agent_timeout_seconds: float = 60.0
     max_question_chars: int = 2000
     max_history_turns: int = 20
 
@@ -136,6 +136,20 @@ class Settings(BaseSettings):
     def _positive_faq_concurrency(cls, v: int) -> int:
         if v <= 0:
             raise ValueError("FAQ_GENERATION_CONCURRENCY must be positive")
+        return v
+
+    @field_validator("agent_max_tool_calls", "agent_max_rewrites")
+    @classmethod
+    def _non_negative_agent_count(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("agent call and rewrite limits must be non-negative")
+        return v
+
+    @field_validator("agent_token_budget", "agent_timeout_seconds")
+    @classmethod
+    def _positive_agent_budget(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError("agent token budget and timeout must be positive")
         return v
 
     @field_validator(
