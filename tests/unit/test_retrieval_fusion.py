@@ -10,7 +10,9 @@ import pytest
 from src.core.config import Settings
 from src.services.retrieval import (
     LexicalRetrievalResult,
+    RetrievalIntent,
     RetrievalResult,
+    apply_metadata_boosts,
     reciprocal_rank_fusion,
 )
 
@@ -97,3 +99,31 @@ def test_rrf_weights_are_applied_from_configuration() -> None:
     )
 
     assert [result.text for result in results] == ["lexical-first", "dense-first"]
+
+
+def test_metadata_boost_keeps_non_matching_evidence_eligible() -> None:
+    dense = [_dense("non-match", 0.9), _dense("match", 0.8)]
+    dense[0].metadata["runtime"] = "nodejs"
+    dense[1].metadata["runtime"] = "python"
+    fused = reciprocal_rank_fusion(dense, [], settings=Settings(_env_file=None, rrf_k=60))
+    settings = Settings(_env_file=None, retrieval_metadata_boost_weight=1.0)
+
+    boosted = apply_metadata_boosts(
+        fused,
+        RetrievalIntent(profile_hints={"runtime": "Python"}),
+        settings=settings,
+    )
+
+    assert [result.text for result in boosted] == ["match", "non-match"]
+    assert {result.text for result in boosted} == {"match", "non-match"}
+    assert boosted[0].metadata_matches == ("runtime",)
+    assert boosted[1].metadata_matches == ()
+
+
+def test_only_explicit_metadata_is_a_hard_filter() -> None:
+    soft = RetrievalIntent(profile_hints={"runtime": "python"})
+    explicit = RetrievalIntent(explicit_filters={"runtime": "python"})
+
+    assert soft.explicit_filters == {}
+    assert explicit.profile_hints == {}
+    assert explicit.explicit_filters == {"runtime": "python"}

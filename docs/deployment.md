@@ -275,6 +275,7 @@ RETRIEVAL_SIMILARITY_THRESHOLD=0.25   # below this is NO_RESULTS_ABOVE_THRESHOLD
 RRF_K=60
 RRF_DENSE_WEIGHT=1.0
 RRF_LEXICAL_WEIGHT=1.0
+RETRIEVAL_METADATA_BOOST_WEIGHT=0.15   # soft multiplier per matching profile field
 INDEX_STALE_AFTER_DAYS=14      # past this, answers carry INDEX_STALE
 
 # --- Agent bounds: enforced in the loop, never merely requested in the prompt ---

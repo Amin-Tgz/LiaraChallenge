@@ -12,7 +12,7 @@ import asyncio
 import time
 import uuid
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from typing import Any, Protocol
 
 from sqlalchemy import Select, func, select
@@ -26,6 +26,8 @@ from src.core.normalization import normalize_query
 from src.db.models import DocumentChunk, IndexVersion
 
 logger = get_logger(__name__)
+
+_METADATA_FIELDS = frozenset({"service", "runtime", "framework"})
 
 
 class EmbeddingProvider(Protocol):
@@ -83,6 +85,29 @@ class ActiveIndex:
 
 
 @dataclass(frozen=True, slots=True)
+class RetrievalIntent:
+    """Profile hints are soft; only explicit filters may remove evidence."""
+
+    profile_hints: Mapping[str, str] = field(default_factory=dict)
+    explicit_filters: Mapping[str, str] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        unknown = (self.profile_hints.keys() | self.explicit_filters.keys()) - _METADATA_FIELDS
+        if unknown:
+            raise ValueError(f"unsupported retrieval metadata: {sorted(unknown)}")
+        object.__setattr__(
+            self,
+            "profile_hints",
+            {key: normalize_query(value) for key, value in self.profile_hints.items() if value},
+        )
+        object.__setattr__(
+            self,
+            "explicit_filters",
+            {key: normalize_query(value) for key, value in self.explicit_filters.items() if value},
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class FusedRetrievalResult:
     """RRF output with every contributing rank preserved."""
 
@@ -99,6 +124,8 @@ class FusedRetrievalResult:
     source_url: str
     heading_anchor: str | None
     source_commit: str
+    metadata_matches: tuple[str, ...] = ()
+    boost_multiplier: float = 1.0
 
     @property
     def citation_url(self) -> str:
@@ -166,7 +193,51 @@ def reciprocal_rank_fusion(
     return sorted(fused, key=lambda result: (-result.fusion_score, str(result.chunk_id)))
 
 
-def _dense_statement(query_vector: list[float], top_k: int) -> Select[tuple[Any, ...]]:
+def apply_metadata_boosts(
+    results: Sequence[FusedRetrievalResult],
+    intent: RetrievalIntent,
+    *,
+    settings: Settings | None = None,
+) -> list[FusedRetrievalResult]:
+    """Softly reorder profile matches without removing any candidate."""
+    settings = settings or get_settings()
+    boosted: list[FusedRetrievalResult] = []
+    for result in results:
+        matches = tuple(
+            key
+            for key, expected in intent.profile_hints.items()
+            if normalize_query(str(result.metadata.get(key) or "")) == expected
+        )
+        boosted.append(
+            replace(
+                result,
+                metadata_matches=matches,
+                boost_multiplier=1.0 + settings.retrieval_metadata_boost_weight * len(matches),
+            )
+        )
+    return sorted(
+        boosted,
+        key=lambda result: (
+            -(result.fusion_score * result.boost_multiplier),
+            str(result.chunk_id),
+        ),
+    )
+
+
+def _hard_filter_conditions(intent: RetrievalIntent | None) -> list[Any]:
+    if intent is None:
+        return []
+    columns = {
+        "service": DocumentChunk.service,
+        "runtime": DocumentChunk.runtime,
+        "framework": DocumentChunk.framework,
+    }
+    return [columns[key] == value for key, value in intent.explicit_filters.items()]
+
+
+def _dense_statement(
+    query_vector: list[float], top_k: int, intent: RetrievalIntent | None
+) -> Select[tuple[Any, ...]]:
     distance = DocumentChunk.embedding.cosine_distance(query_vector)
     similarity = (1 - distance).label("similarity")
     return (
@@ -194,6 +265,7 @@ def _dense_statement(query_vector: list[float], top_k: int) -> Select[tuple[Any,
         .where(
             IndexVersion.is_active.is_(True),
             DocumentChunk.embedding.is_not(None),
+            *_hard_filter_conditions(intent),
         )
         .order_by(distance, DocumentChunk.id)
         .limit(top_k)
@@ -222,6 +294,7 @@ async def dense_retrieve_by_vector(
     *,
     settings: Settings | None = None,
     top_k: int | None = None,
+    intent: RetrievalIntent | None = None,
 ) -> list[RetrievalResult]:
     """Rank active-index chunks by cosine similarity.
 
@@ -244,7 +317,7 @@ async def dense_retrieve_by_vector(
     started = time.perf_counter()
     try:
         active = await _require_active_index(executor)
-        rows = (await executor.execute(_dense_statement(query_vector, limit))).all()
+        rows = (await executor.execute(_dense_statement(query_vector, limit, intent))).all()
     except RescueError:
         raise
     except SQLAlchemyError as err:
@@ -299,6 +372,7 @@ async def dense_retrieve(
     *,
     settings: Settings | None = None,
     top_k: int | None = None,
+    intent: RetrievalIntent | None = None,
 ) -> list[RetrievalResult]:
     """Normalize and embed a question, then search the active index."""
     normalized = normalize_query(query)
@@ -310,6 +384,7 @@ async def dense_retrieve(
         query_vector,
         settings=settings,
         top_k=top_k,
+        intent=intent,
     )
 
 
@@ -347,6 +422,7 @@ async def lexical_retrieve(
     *,
     settings: Settings | None = None,
     top_k: int | None = None,
+    intent: RetrievalIntent | None = None,
 ) -> list[LexicalRetrievalResult]:
     """Find exact terms in normalized text through the generated tsvector."""
     settings = settings or get_settings()
@@ -384,6 +460,7 @@ async def lexical_retrieve(
         .where(
             IndexVersion.is_active.is_(True),
             DocumentChunk.search_vector.op("@@")(tsquery),
+            *_hard_filter_conditions(intent),
         )
         .order_by(lexical_score.desc(), DocumentChunk.id)
         .limit(limit)
@@ -447,6 +524,7 @@ async def hybrid_retrieve(
     *,
     settings: Settings | None = None,
     top_k: int | None = None,
+    intent: RetrievalIntent | None = None,
 ) -> list[FusedRetrievalResult]:
     """Run dense and lexical retrieval, then return their RRF ordering."""
     settings = settings or get_settings()
@@ -461,12 +539,14 @@ async def hybrid_retrieve(
         query_vector,
         settings=settings,
         top_k=limit,
+        intent=intent,
     )
     lexical = await lexical_retrieve(
         executor,
         normalized,
         settings=settings,
         top_k=limit,
+        intent=intent,
     )
     dense_ids = {result.chunk_id for result in dense}
     lexical_only_ids = [result.chunk_id for result in lexical if result.chunk_id not in dense_ids]
@@ -481,6 +561,8 @@ async def hybrid_retrieve(
         settings=settings,
         lexical_similarities=lexical_similarities,
     )[:limit]
+    if intent is not None and intent.profile_hints:
+        fused = apply_metadata_boosts(fused, intent, settings=settings)
     logger.info(
         "hybrid retrieval fused",
         extra={

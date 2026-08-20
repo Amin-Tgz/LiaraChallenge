@@ -87,6 +87,7 @@ class Settings(BaseSettings):
     rrf_k: int = 60
     rrf_dense_weight: float = 1.0
     rrf_lexical_weight: float = 1.0
+    retrieval_metadata_boost_weight: float = 0.15
     index_stale_after_days: int = 14
 
     # --- Agent bounds ---
@@ -125,7 +126,11 @@ class Settings(BaseSettings):
             raise ValueError("RRF_K must be positive")
         return v
 
-    @field_validator("rrf_dense_weight", "rrf_lexical_weight")
+    @field_validator(
+        "rrf_dense_weight",
+        "rrf_lexical_weight",
+        "retrieval_metadata_boost_weight",
+    )
     @classmethod
     def _non_negative_rrf_weight(cls, v: float) -> float:
         if v < 0:

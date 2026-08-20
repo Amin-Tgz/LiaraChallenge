@@ -55,7 +55,7 @@
 - [x] 7.2 Implement lexical retrieval over normalized text with tsvector; verify an exact error string and a command name are both found
 - [x] 7.3 Implement RRF fusion retaining per-method ranks; verify ordering is reproducible and contributing ranks are recoverable
 - [x] 7.4 Expose relevance as similarity everywhere in config, responses, and logs; verify no distance value is returned where similarity is expected
-- [ ] 7.5 Implement metadata soft boosting with hard filtering only on explicit intent; verify a boosted query still returns non-matching chunks
+- [x] 7.5 Implement metadata soft boosting with hard filtering only on explicit intent; verify a boosted query still returns non-matching chunks
 - [ ] 7.6 Distinguish no-active-index, retrieval-failure, and nothing-above-threshold; verify each returns its own error code and message
 
 ## 8. FAQ fast path
