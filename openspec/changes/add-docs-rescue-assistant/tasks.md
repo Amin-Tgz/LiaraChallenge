@@ -51,7 +51,7 @@
 
 ## 7. Retrieval
 
-- [ ] 7.1 Implement dense retrieval over pgvector filtered by active index version; verify results carry score, text, metadata, source URL, anchor, and commit
+- [x] 7.1 Implement dense retrieval over pgvector filtered by active index version; verify results carry score, text, metadata, source URL, anchor, and commit
 - [ ] 7.2 Implement lexical retrieval over normalized text with tsvector; verify an exact error string and a command name are both found
 - [ ] 7.3 Implement RRF fusion retaining per-method ranks; verify ordering is reproducible and contributing ranks are recoverable
 - [ ] 7.4 Expose relevance as similarity everywhere in config, responses, and logs; verify no distance value is returned where similarity is expected
