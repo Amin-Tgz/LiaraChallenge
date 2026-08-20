@@ -1,0 +1,31 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, 'Segoe UI', Tahoma, sans-serif;
+  line-height: 1.7;
+}
+
+body {
+  margin: 0;
+  padding: 2rem 1rem;
+}
+
+.shell {
+  max-width: 44rem;
+  margin-inline: auto;
+}
+
+.lead {
+  opacity: 0.8;
+}
+
+.checks {
+  padding-inline-start: 1.25rem;
+}
+
+/* Code is always left-to-right, even inside an RTL page. */
+code,
+pre {
+  direction: ltr;
+  unicode-bidi: isolate;
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+}

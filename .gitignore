@@ -1,0 +1,27 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node / frontend
+node_modules/
+web/dist/
+web/node_modules/
+*.local
+
+# Tooling / local state
+.DS_Store
+var/
+tmp/
+playwright-report/
+test-results/
+graphify-out/

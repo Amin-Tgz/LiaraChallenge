@@ -1,0 +1,90 @@
+# Local development. `docker compose up` must bring the whole stack up on
+# Docker Desktop so the gap to Liara stays small enough that "works locally"
+# means something. Production runs these same images as Liara services.
+
+name: liara-rescue
+
+services:
+  postgres:
+    # pgvector is enabled here at build time; on Liara it is a manual panel step.
+    image: pgvector/pgvector:0.8.0-pg17
+    environment:
+      POSTGRES_USER: rescue
+      POSTGRES_PASSWORD: rescue
+      POSTGRES_DB: rescue
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rescue -d rescue"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7.4.2-bookworm
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  portkey:
+    # Our own container image of the open-source gateway — not Portkey's SaaS.
+    image: portkeyai/gateway:1.15.2
+    ports:
+      - "8787:8787"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8787/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+    env_file: [.env]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://rescue:rescue@postgres:5432/rescue
+      REDIS_URL: redis://redis:6379/0
+      PORTKEY_BASE_URL: http://portkey:8787
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src
+      - ./alembic:/app/alembic
+      - ./scripts:/app/scripts
+      - ./web/dist:/app/web/dist
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      portkey: {condition: service_started}
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+    command: ["python", "-m", "src.worker"]
+    env_file: [.env]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://rescue:rescue@postgres:5432/rescue
+      REDIS_URL: redis://redis:6379/0
+      PORTKEY_BASE_URL: http://portkey:8787
+    volumes:
+      - ./src:/app/src
+      - ./scripts:/app/scripts
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      portkey: {condition: service_started}
+
+volumes:
+  postgres-data:
+  redis-data:

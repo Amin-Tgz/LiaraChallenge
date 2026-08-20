@@ -9,13 +9,13 @@
 
 ## 2. Walking skeleton deployed (hour one)
 
-- [ ] 2.1 Scaffold the FastAPI project per the layout in docs/deployment.md §6b with uv, `pyproject.toml`, `.python-version`, and a committed `uv.lock`; verify `uv sync --frozen` succeeds from a clean checkout
-- [ ] 2.2 Scaffold the React/TypeScript/Vite frontend; verify `npm run build` produces a bundle
-- [ ] 2.2b Write `docker-compose.yml` bringing up Postgres, Redis, API, Worker, and the Portkey gateway locally; verify `docker compose up` starts the full stack on Docker Desktop and `/health/ready` responds
+- [x] 2.1 Scaffold the FastAPI project per the layout in docs/deployment.md §6b with uv, `pyproject.toml`, `.python-version`, and a committed `uv.lock`; verify `uv sync --frozen` succeeds from a clean checkout
+- [x] 2.2 Scaffold the React/TypeScript/Vite frontend; verify `npm run build` produces a bundle
+- [x] 2.2b Write `docker-compose.yml` bringing up Postgres, Redis, API, Worker, and the Portkey gateway locally; verify `docker compose up` starts the full stack on Docker Desktop and `/health/ready` responds
 - [ ] 2.2c Initialize Alembic with `env.py` reading the database URL from settings; verify `alembic upgrade head` runs against both the local compose database and Liara
-- [ ] 2.3 Mount the built frontend as static files from the API with an SPA catch-all, API routes under `/api/v1`; verify the root path serves the SPA and `/api/v1/*` does not collide
-- [ ] 2.4 Add `.env.example` and confirm `.env` is gitignored; verify no secret appears in `git ls-files`
-- [ ] 2.5 Implement `/health/live` and a `/health/ready` returning per-dependency status; verify the response shape matches docs/deployment.md §10
+- [x] 2.3 Mount the built frontend as static files from the API with an SPA catch-all, API routes under `/api/v1`; verify the root path serves the SPA and `/api/v1/*` does not collide
+- [x] 2.4 Add `.env.example` and confirm `.env` is gitignored; verify no secret appears in `git ls-files`
+- [x] 2.5 Implement `/health/live` and a `/health/ready` returning per-dependency status; verify the response shape matches docs/deployment.md §10
 - [ ] 2.6 **Deploy to Liara and verify `/health/ready` is reachable over HTTPS with Postgres and Redis both reporting healthy**
 
 ## 3. Data model
@@ -23,7 +23,7 @@
 - [ ] 3.1 Define schema for sessions, conversations, messages, request_jobs, feedback, faq_items, documents, document_chunks, index_versions, image_assets, usage_events; verify Alembic generates and applies the migration
 - [ ] 3.2 Add `vector(1536)` column and HNSW index on document_chunks; verify `EXPLAIN` on a similarity query shows index usage rather than a sequential scan
 - [ ] 3.3 Add a unique constraint on the job idempotency key; verify duplicate insert raises rather than creating a second row
-- [ ] 3.4 Implement the error-code enumeration from docs/deployment.md §10; verify every member has a distinct code and Persian message via a table-driven test
+- [x] 3.4 Implement the error-code enumeration from docs/deployment.md §10; verify every member has a distinct code and Persian message via a table-driven test
 
 ## 4. Persian normalization
 
