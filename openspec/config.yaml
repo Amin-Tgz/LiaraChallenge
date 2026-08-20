@@ -1,0 +1,66 @@
+schema: spec-driven
+
+context: |
+  Liara Documentation Rescue Assistant — rescues users stuck in Liara's docs via
+  FAQ semantic search, an installable Skill, an MCP server, and bounded Agentic RAG chat.
+
+  Specification documents (read before writing artifacts):
+    - docs/liara-docs-rescue-plan.md — product scope, UX, priorities, Definition of Done
+    - docs/deployment.md — infrastructure, models, pricing, config, MDX pre-pass, error taxonomy
+    - AGENTS.md / RULES.md — engineering rules for all coding agents
+
+  Stack: FastAPI + React/TypeScript/Vite/shadcn + PostgreSQL/pgvector + Redis +
+  self-hosted Portkey gateway. Deployed on Liara. Python deps via uv with committed lockfile.
+
+  Models via AvalAI (OpenAI-compatible): gemini-3.7-flash for chat and FAQ generation;
+  text-embedding-3-large at 1536 dimensions (pgvector caps HNSW indexes at 2000 dims,
+  so the native 3072 is unusable).
+
+  Product language is Persian. UI is RTL, code blocks are LTR, mixed Persian/English
+  inline text must render correctly.
+
+  Constraints: 2 days, one developer. Breadth held constant, depth varies by tier.
+
+rules:
+  proposal:
+    - Scope to what is demonstrable within the 2-day budget
+    - State explicitly which existing plan sections the change implements
+  design:
+    - Reference docs/deployment.md for infrastructure decisions rather than restating them
+    - Every new failure mode gets a distinct error code and Persian user message
+  tasks:
+    - Each task carries verifiable acceptance criteria
+    - Deployment tasks come first, not last — the Skill depends on MCP, which depends on a live API
+  spec:
+    - Requirements must be observable from outside the system
+
+# Project context (optional)
+# This is shown to AI when creating artifacts.
+# Add your tech stack, conventions, style guides, domain knowledge, etc.
+# Example:
+#   context: |
+#     Tech stack: TypeScript, React, Node.js
+#     We use conventional commits
+#     Domain: e-commerce platform
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always include a "Non-goals" section
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
+
+# Per-operation guidance (optional)
+# Add advisory guidance for how apply and archive work should be conducted.
+# This is separate from artifact rules above.
+# Example:
+#   operations:
+#     apply:
+#       guidance:
+#         - Keep test summaries concise
+#     archive:
+#       guidance:
+#         - Summarize the archive outcome before finishing
