@@ -32,6 +32,9 @@ class Settings(BaseSettings):
 
     # --- Bulk FAQ generation ---
     faq_llm_model: str = "gemini-3.7-flash"
+    faq_reasoning_effort: str = "low"
+    faq_items_per_document: int = 5
+    faq_generation_timeout_seconds: float = 120.0
 
     # --- Embeddings ---
     embedding_base_url: str = "https://api.avalai.ir/v1"

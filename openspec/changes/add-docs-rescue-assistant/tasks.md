@@ -60,7 +60,7 @@
 
 ## 8. FAQ fast path
 
-- [ ] 8.1 Implement FAQ generation from indexed documents using structured output and `reasoning_effort=low`; verify malformed entries are rejected and recorded without aborting the run
+- [x] 8.1 Implement FAQ generation from indexed documents using structured output and `reasoning_effort=low`; verify malformed entries are rejected and recorded without aborting the run
 - [ ] 8.2 Embed FAQ questions into their own space and implement threshold matching; verify below-threshold results are suppressed
 - [ ] 8.3 Implement the synchronous FAQ search endpoint; verify no answer-generation model call occurs on this path
 - [ ] 8.4 Implement solved/unresolved feedback persistence and unresolved-question recording; verify both outcomes are queryable afterwards

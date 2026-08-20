@@ -227,6 +227,9 @@ LLM_MODEL=gemini-3.7-flash
 
 # --- Bulk FAQ generation: separate var so it can diverge from chat ---
 FAQ_LLM_MODEL=gemini-3.7-flash
+FAQ_REASONING_EFFORT=low       # reasoning bills as output; keep bulk extraction cheap
+FAQ_ITEMS_PER_DOCUMENT=5
+FAQ_GENERATION_TIMEOUT_SECONDS=120
 
 # --- Embeddings (verified working) ---
 EMBEDDING_BASE_URL=https://api.avalai.ir/v1
@@ -500,6 +503,8 @@ Every failure carries a stable machine code, a Persian user-facing message that 
 | `INGESTION_SOURCE_UNAVAILABLE` | Docs repo unreachable/unreadable, or scope matched no files | «دریافت مستندات از مخزن اصلی ممکن نشد، بنابراین ایندکس به‌روزرسانی نشد. پاسخ‌ها همچنان از آخرین نسخه‌ی سالم ارائه می‌شوند.» | Check `DOCS_REPO_URL`, `DOCS_REPO_BRANCH`, `INGEST_SECTIONS`; prior index untouched |
 | `INDEX_VALIDATION_FAILED` | New index failed smoke validation and was not activated | «نسخه‌ی جدید ایندکس اعتبارسنجی نشد و فعال نشد. پاسخ‌ها از نسخه‌ی سالم قبلی ارائه می‌شوند.» | Read `index_versions.validation_report` for the failed check |
 | `DOCUMENT_PARSE_FAILED` | MDX pre-pass produced no text for a non-empty source document | «یکی از صفحه‌های مستندات قابل پردازش نبود و ایندکس نشد. این یک خطای پردازش مستندات است، نه نبود پاسخ.» | Inspect that document's `discarded_char_ratio` and the unrecognized tags in the ingestion report; upstream likely added a component the §7 table misses |
+| `FAQ_GENERATION_FAILED` | FAQ model/gateway call failed for a document | «تولید پرسش‌های مرتبط از مستندات ناموفق بود. پرسش‌های معتبر قبلی همچنان در دسترس‌اند.» | Check the FAQ request and gateway response |
+| `FAQ_OUTPUT_INVALID` | One generated FAQ entry failed structured validation | «خروجی تولید پرسش‌های مرتبط ساختار معتبر نداشت و ذخیره نشد. سایر پرسش‌های معتبر پردازش شدند.» | Inspect recorded validation errors and source document |
 
 `NO_ACTIVE_INDEX` (system broken) and `NO_RESULTS_ABOVE_THRESHOLD` (working correctly, real docs gap) must **never** share a message. One is an outage; the other is your product's most valuable data.
 

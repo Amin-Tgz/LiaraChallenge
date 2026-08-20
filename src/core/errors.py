@@ -29,6 +29,8 @@ class ErrorCode(StrEnum):
     DOCUMENT_PARSE_FAILED = "DOCUMENT_PARSE_FAILED"
     INGESTION_SOURCE_UNAVAILABLE = "INGESTION_SOURCE_UNAVAILABLE"
     INDEX_VALIDATION_FAILED = "INDEX_VALIDATION_FAILED"
+    FAQ_GENERATION_FAILED = "FAQ_GENERATION_FAILED"
+    FAQ_OUTPUT_INVALID = "FAQ_OUTPUT_INVALID"
     INPUT_TOO_LARGE = "INPUT_TOO_LARGE"
     UNAUTHORIZED = "UNAUTHORIZED"
     INVALID_REQUEST = "INVALID_REQUEST"
@@ -160,6 +162,27 @@ ERROR_SPECS: dict[ErrorCode, ErrorSpec] = {
             "the prior version still serves. Read index_versions.validation_report "
             "for the failed check."
         ),
+        transient=False,
+    ),
+    ErrorCode.FAQ_GENERATION_FAILED: ErrorSpec(
+        code=ErrorCode.FAQ_GENERATION_FAILED,
+        http_status=503,
+        message_fa=(
+            "تولید پرسش‌های مرتبط از مستندات ناموفق بود. پرسش‌های معتبر قبلی همچنان در دسترس‌اند."
+        ),
+        operator_action=(
+            "Check the FAQ model request and gateway response for the affected document."
+        ),
+        transient=True,
+    ),
+    ErrorCode.FAQ_OUTPUT_INVALID: ErrorSpec(
+        code=ErrorCode.FAQ_OUTPUT_INVALID,
+        http_status=500,
+        message_fa=(
+            "خروجی تولید پرسش‌های مرتبط ساختار معتبر نداشت و ذخیره نشد. "
+            "سایر پرسش‌های معتبر پردازش شدند."
+        ),
+        operator_action="Inspect the recorded validation errors and the source document.",
         transient=False,
     ),
     ErrorCode.INPUT_TOO_LARGE: ErrorSpec(
