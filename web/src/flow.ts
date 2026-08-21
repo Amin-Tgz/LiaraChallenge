@@ -8,6 +8,7 @@
  */
 
 const QUESTION_KEY = 'rescue.question'
+const DRAFT_KEY = 'rescue.next-question'
 
 export function rememberQuestion(question: string): void {
   try {
@@ -29,6 +30,30 @@ export function recallQuestion(): string {
 export function forgetQuestion(): void {
   try {
     sessionStorage.removeItem(QUESTION_KEY)
+  } catch {
+    /* nothing to clean up */
+  }
+}
+
+export function rememberNextQuestion(question: string): void {
+  try {
+    sessionStorage.setItem(DRAFT_KEY, question)
+  } catch {
+    /* navigation still works; only the draft handoff is unavailable */
+  }
+}
+
+export function recallNextQuestion(): string {
+  try {
+    return sessionStorage.getItem(DRAFT_KEY) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+export function forgetNextQuestion(): void {
+  try {
+    sessionStorage.removeItem(DRAFT_KEY)
   } catch {
     /* nothing to clean up */
   }

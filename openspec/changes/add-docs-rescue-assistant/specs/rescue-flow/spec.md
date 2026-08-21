@@ -120,3 +120,40 @@ The interface SHALL support keyboard navigation with visible focus states, provi
 
 - **WHEN** a user navigates the primary flow using only a keyboard
 - **THEN** every interactive element is reachable and its focus state is visible
+
+### Requirement: Keyboard-first question entry
+
+The primary and follow-up question fields SHALL submit with Enter and SHALL insert a newline with Shift+Enter, without submitting while an input-method composition is active.
+
+#### Scenario: Enter submits
+
+- **WHEN** a user presses Enter in a question field without Shift
+- **THEN** the containing form submits exactly once
+
+#### Scenario: Shift Enter keeps multiline input
+
+- **WHEN** a user presses Shift+Enter
+- **THEN** a newline is inserted and no request is submitted
+
+### Requirement: User-controlled color theme and navigation
+
+The interface SHALL offer accessible light and dark themes, initialize from the system preference on first visit, remember an explicit choice, and provide a persistent route back to the home question view from every non-home screen.
+
+#### Scenario: Theme preference survives reload
+
+- **WHEN** a user selects the other color theme and reloads the application
+- **THEN** the selected theme is restored without relying on the operating-system theme changing
+
+#### Scenario: Home control is available
+
+- **WHEN** a user is on any step after the landing view
+- **THEN** a keyboard-accessible control in the top-left header returns to the home question view
+
+### Requirement: Conversation handoff after three turns
+
+The maximum user turns in one chat SHALL be configurable and SHALL default to three. Once reached, the next typed question SHALL be transferred into the landing view's «سؤال شما» field for confirmation as a fresh rescue flow rather than extending the old model context.
+
+#### Scenario: Fourth question becomes a fresh draft
+
+- **WHEN** three user turns already exist and the user enters another question
+- **THEN** no fourth chat job is created and the text appears in the landing question field ready for submission

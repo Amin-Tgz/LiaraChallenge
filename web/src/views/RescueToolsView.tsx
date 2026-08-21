@@ -36,14 +36,14 @@ const TOOLS: Tool[] = [
   },
   {
     name: 'skill',
-    title: 'افزودن به دستیار کدنویسی‌تان',
+    title: 'افزودن Skill لیارا به دستیار کدنویسی',
     description:
-      'اگر با Claude Code یا ابزار مشابهی کار می‌کنید، این مهارت را نصب می‌کنید تا دستیارتان پیش از پاسخ‌دادن، مستندات لیارا را جست‌وجو کند.',
-    action: 'راهنمای نصب',
+      'فایل Skill را دانلود و در دستیار سازگار نصب کنید تا هنگام پرسش دربارهٔ لیارا، روش جست‌وجوی مستند و قواعد استناد را در اختیار داشته باشد.',
+    action: 'دانلود و راهنمای نصب',
   },
   {
     name: 'mcp',
-    title: 'اتصال مستقیم ابزارها',
+    title: 'اتصال سرور MCP',
     description:
       'یک سرور MCP که جست‌وجو در مستندات، خواندن یک صفحه و عیب‌یابی را به‌صورت ابزار در اختیار هر میزبان سازگار می‌گذارد.',
     action: 'راهنمای اتصال',
@@ -102,6 +102,7 @@ export default function RescueToolsView() {
 
   return (
     <main className="shell">
+      <span className="eyebrow">اگر پرسش مرتبط کافی نبود</span>
       <h1>ابزارهای نجات</h1>
       {question && (
         <p className="original-question">
@@ -115,6 +116,9 @@ export default function RescueToolsView() {
       <ul className="tools">
         {TOOLS.map((tool) => (
           <li key={tool.name}>
+            <span className={'tool-icon tool-icon-' + tool.name} aria-hidden="true">
+              {tool.name === 'chat' ? 'گ' : tool.name === 'skill' ? 'S' : 'M'}
+            </span>
             <h2>{tool.title}</h2>
             <p>{tool.description}</p>
             <button

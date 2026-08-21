@@ -27,6 +27,10 @@ the web application.
 `diagnose` also accepts `error_text`. Pass the error **verbatim**, never
 paraphrased: the exact string is the highest-signal term available, and lexical
 retrieval matches it literally where an embedding of a paraphrase would not.
+The server keeps that literal failure in both searches, then runs a second
+remediation-oriented query for prerequisites, checks, and corrective steps.
+Distinct remediation passages are promoted within the same configured evidence
+budget, so a definition cannot crowd every actionable result out.
 
 Every result carries a citation — anchored `source_url`, page title, section
 title, and the documentation commit it came from — plus image metadata where the
@@ -97,12 +101,47 @@ Or in `.mcp.json` at the project root, to share it with a team:
 
 ### Codex
 
-In `~/.codex/config.toml`:
+From the CLI:
+
+```bash
+codex mcp add liara-docs-rescue --url https://liara-rescue-api.liara.run/mcp
+```
+
+Or in `~/.codex/config.toml` (the Codex app, CLI, and IDE extension share it):
 
 ```toml
 [mcp_servers.liara-docs-rescue]
 url = "https://liara-rescue-api.liara.run/mcp"
 ```
+
+### Open WebUI
+
+Open **Admin Settings → Integrations → Add Connection**, choose **MCP
+(Streamable HTTP)**, and enter the endpoint. Native remote MCP support requires
+Open WebUI 0.6.31 or newer and server connections are configured by an admin.
+
+### Jan
+
+Open **Settings → MCP Servers → Add MCP Server**, choose **HTTP**, enter the
+endpoint, and enable the server. Start a fresh chat after changing the tool list.
+
+### AnythingLLM
+
+Use the MCP management screen in Agent settings, or add a streamable server to
+`anythingllm_mcp_servers.json`:
+
+```json
+{
+  "liara-docs-rescue": {
+    "type": "streamable",
+    "url": "https://liara-rescue-api.liara.run/mcp"
+  }
+}
+```
+
+The web UI presents these six hosts as separate expandable cards because the
+configuration location and transport wording differ even though the endpoint
+is identical.
 
 ### MCP Inspector
 

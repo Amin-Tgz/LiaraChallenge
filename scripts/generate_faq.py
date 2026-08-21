@@ -9,6 +9,7 @@ configured limit; FAQ-question embeddings are generated after extraction.
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
 import sys
@@ -27,7 +28,17 @@ from src.services.faq import GatewayFaqGenerator, embed_faq_questions, generate_
 logger = get_logger(__name__)
 
 
-async def _main() -> int:
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Regenerate unchanged documents and atomically replace their active FAQ entries.",
+    )
+    return parser.parse_args()
+
+
+async def _main(*, force: bool = False) -> int:
     configure_logging()
     settings = get_settings()
     session_factory = get_sessionmaker()
@@ -66,6 +77,7 @@ async def _main() -> int:
                             document_id,
                             generator,
                             settings=settings,
+                            force=force,
                         )
                         await session.commit()
                     reports.append(asdict(report))
@@ -108,7 +120,8 @@ async def _main() -> int:
 
 async def _entrypoint() -> int:
     try:
-        return await _main()
+        args = _parse_args()
+        return await _main(force=args.force)
     finally:
         await dispose_engine()
 

@@ -94,6 +94,16 @@ Every stored chunk SHALL carry metadata sufficient to cite it precisely and to f
 - **WHEN** a chunk's source section contains an image
 - **THEN** the image URL, alt text, and position are stored in that chunk's metadata, and the alt text plus surrounding instructional text are included in the text submitted for embedding
 
+#### Scenario: Page title remains document metadata
+
+- **WHEN** a chunk belongs to a nested section whose parent has its own title
+- **THEN** the chunk still carries the document's page title separately from both the parent and current section titles
+
+#### Scenario: Split boundaries are recorded
+
+- **WHEN** an oversized semantic unit must be split across chunks
+- **THEN** each produced chunk records whether content continues before or after it rather than silently appearing complete
+
 ### Requirement: Embedding generation
 
 The system SHALL generate embeddings in batches at the configured dimensionality and record that dimensionality in the index metadata.

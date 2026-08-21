@@ -67,6 +67,32 @@ NO_ACTIVE_INDEX the service itself is not ready, which is an operator problem an
 a different thing entirely."""
 
 
+def build_diagnostic_query(problem: str, error_text: str | None = None) -> str:
+    """Preserve the literal failure while biasing retrieval toward a remedy."""
+    failure = f"{problem}\n{error_text}".strip() if error_text else problem.strip()
+    return f"{failure}\n" "راه رفع مشکل، مراحل عیب‌یابی، پیش‌نیازها، تنظیمات لازم و روش بررسی"
+
+
+def merge_diagnostic_evidence(
+    *,
+    primary: list[dict[str, Any]],
+    remediation: list[dict[str, Any]],
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Prefer actionable passages, then fill the bounded result with distinct evidence."""
+    merged: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in [*remediation, *primary]:
+        identity = str(item.get("evidence_id") or item)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        merged.append(item)
+        if len(merged) == limit:
+            break
+    return merged
+
+
 def _http_request(ctx: Context) -> Request | None:
     """The underlying HTTP request, when this call arrived over HTTP.
 
@@ -321,7 +347,7 @@ def build_mcp_server(*, stateless: bool = True) -> FastMCP:
         verbatim where a dense embedding of a paraphrase would not.
         """
         query = f"{problem}\n{error_text}".strip() if error_text else problem
-        evidence = await _call_documentation_tool(
+        primary_evidence = await _call_documentation_tool(
             ctx,
             AgentToolName.SEARCH_DOCS,
             {
@@ -331,6 +357,29 @@ def build_mcp_server(*, stateless: bool = True) -> FastMCP:
                 "framework": None,
                 "top_k": None,
             },
+        )
+        try:
+            remediation_evidence = await _call_documentation_tool(
+                ctx,
+                AgentToolName.SEARCH_DOCS,
+                {
+                    "query": build_diagnostic_query(problem, error_text),
+                    "service": service,
+                    "runtime": runtime,
+                    "framework": None,
+                    "top_k": None,
+                },
+            )
+        except ToolError as err:
+            logger.info(
+                "diagnose continued without remediation search",
+                extra={"error_code": str(err.code)},
+            )
+            remediation_evidence = []
+        evidence = merge_diagnostic_evidence(
+            primary=primary_evidence,
+            remediation=remediation_evidence,
+            limit=get_settings().retrieval_top_k,
         )
         try:
             related = await _call_documentation_tool(

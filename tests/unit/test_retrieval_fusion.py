@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import asdict
+from dataclasses import asdict, replace
 
 import pytest
 
@@ -13,6 +13,7 @@ from src.services.retrieval import (
     RetrievalIntent,
     RetrievalResult,
     apply_metadata_boosts,
+    deduplicate_retrieval_results,
     reciprocal_rank_fusion,
 )
 
@@ -127,3 +128,23 @@ def test_only_explicit_metadata_is_a_hard_filter() -> None:
     assert soft.explicit_filters == {}
     assert explicit.profile_hints == {}
     assert explicit.explicit_filters == {"runtime": "python"}
+
+
+def test_near_duplicate_passages_are_replaced_by_distinct_evidence() -> None:
+    body = "برای استقرار برنامه ابتدا تنظیمات را بررسی کنید و سپس دستور deploy را اجرا کنید."
+    dense = [
+        replace(_dense("first", 0.91), text=f"صفحه اول\n\n{body}"),
+        replace(_dense("duplicate", 0.90), text=f"صفحه دوم\n\n{body} دوباره."),
+        replace(
+            _dense("distinct", 0.89),
+            text="صفحه سوم\n\nبرای فعال‌سازی دامنه رکورد DNS را تنظیم کنید.",
+        ),
+    ]
+    ranked = reciprocal_rank_fusion(dense, [], settings=Settings(_env_file=None))
+
+    results = deduplicate_retrieval_results(ranked, threshold=0.85)
+
+    assert [result.source_url for result in results] == [
+        "https://docs.liara.ir/first",
+        "https://docs.liara.ir/distinct",
+    ]

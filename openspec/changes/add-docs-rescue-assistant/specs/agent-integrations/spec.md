@@ -56,6 +56,20 @@ The system SHALL provide working configuration examples for common MCP hosts and
 - **WHEN** the MCP server is released
 - **THEN** its tools have been exercised successfully from a real host or inspector
 
+#### Scenario: Host-specific setup is discoverable
+
+- **WHEN** a user chooses a supported coding agent or chat host
+- **THEN** a branded card reveals copy-ready steps naming the current settings screen or configuration-file location for that host and links to its official documentation
+
+### Requirement: Diagnose prioritizes actionable evidence
+
+The diagnose tool SHALL retain the verbatim symptom and error text while performing an additional troubleshooting-oriented retrieval pass, then deduplicate and bound the combined evidence so prerequisite and remediation passages are not displaced by repeated definitional content.
+
+#### Scenario: Troubleshooting evidence is promoted
+
+- **WHEN** a failure query has both definitional and fix-oriented documentation
+- **THEN** diagnose includes distinct prerequisite or remediation evidence within its configured result budget
+
 ### Requirement: Skill encodes a problem-solving workflow
 
 The system SHALL provide an installable Skill that instructs a coding agent to identify the relevant service and intent, ask for missing information that changes the answer, retrieve documentation evidence before answering, answer only from that evidence, present runnable commands, preserve sources and relevant images, avoid guessing when evidence is absent, and propose a verification step.
@@ -83,6 +97,11 @@ The Skill SHALL ship with installation instructions, a version identifier, and a
 
 - **WHEN** a user consults the Skill's documentation
 - **THEN** installation steps, a version, and a worked example are present
+
+#### Scenario: Skill artifact downloads from the product
+
+- **WHEN** a user follows the web installation guide or activates its download action
+- **THEN** the server returns the canonical versioned `SKILL.md` as a Markdown attachment rather than the SPA HTML shell
 
 ### Requirement: Consistent evidence contract across surfaces
 

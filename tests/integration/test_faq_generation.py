@@ -43,6 +43,11 @@ class MixedGenerator:
         )
 
 
+class FailingGenerator:
+    def generate(self, *, title: str, chunks: list[dict]) -> str:
+        raise RuntimeError("simulated provider failure")
+
+
 async def test_malformed_faq_is_recorded_and_run_continues(
     migrated: AsyncConnection,
 ) -> None:
@@ -86,3 +91,35 @@ async def test_malformed_faq_is_recorded_and_run_continues(
     second = await generate_document_faqs(migrated, document_id, generator)
     assert second.skipped is True
     assert generator.calls == 1
+
+    with pytest.raises(RuntimeError, match="simulated provider failure"):
+        await generate_document_faqs(
+            migrated,
+            document_id,
+            FailingGenerator(),
+            force=True,
+        )
+    assert (
+        await migrated.execute(select(FaqItem.is_active).where(FaqItem.question == question))
+    ).scalar_one() is True
+
+    replacement_question = f"پرسش جایگزین معتبر {uuid.uuid4()} چیست؟"
+    replacement = MixedGenerator(replacement_question)
+    forced = await generate_document_faqs(
+        migrated,
+        document_id,
+        replacement,
+        force=True,
+    )
+    assert forced.skipped is False
+    assert forced.accepted == 1
+    active_by_question = dict(
+        (
+            await migrated.execute(
+                select(FaqItem.question, FaqItem.is_active).where(
+                    FaqItem.question.in_([question, replacement_question])
+                )
+            )
+        ).all()
+    )
+    assert active_by_question == {question: False, replacement_question: True}

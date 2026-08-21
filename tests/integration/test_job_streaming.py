@@ -10,10 +10,11 @@ from typing import Any
 import httpx
 import pytest
 from redis.asyncio import Redis
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.errors import ErrorCode, RescueError
-from src.db.models.conversation import AnonymousSession, Conversation
+from src.db.models.conversation import AnonymousSession, Conversation, RequestJob
 from src.db.models.enums import JobStatus
 from src.db.session import get_session
 from src.main import create_app
@@ -330,6 +331,47 @@ async def test_posting_the_same_idempotency_key_twice_returns_one_job(
     assert first.json()["created"] is True
     assert second.json()["created"] is False
     assert first.json()["job"]["id"] == second.json()["job"]["id"]
+
+
+async def test_a_fourth_user_turn_is_rejected_without_creating_a_job(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    anon, _ = await _seed(db_session)
+    monkeypatch.setattr("src.api.v1.chat.enqueue", _no_enqueue)
+
+    app = create_app()
+    client = await _client(app, db_session, anon)
+    try:
+        first = await client.post(
+            "/api/v1/chat/conversations",
+            json={"question": "پرسش اول"},
+        )
+        conversation_id = first.json()["conversation_id"]
+        for question in ("پرسش دوم", "پرسش سوم"):
+            response = await client.post(
+                f"/api/v1/chat/conversations/{conversation_id}/messages",
+                json={"question": question},
+            )
+            assert response.status_code == 200
+        rejected = await client.post(
+            f"/api/v1/chat/conversations/{conversation_id}/messages",
+            json={"question": "پرسش چهارم"},
+        )
+    finally:
+        await client.aclose()
+        app.dependency_overrides.clear()
+
+    assert rejected.status_code == 409
+    assert rejected.json()["error"]["code"] == ErrorCode.HISTORY_LIMIT_REACHED.value
+    job_count = (
+        await db_session.execute(
+            select(func.count(RequestJob.id)).where(
+                RequestJob.conversation_id == uuid.UUID(conversation_id)
+            )
+        )
+    ).scalar_one()
+    assert job_count == 3
 
 
 async def _no_enqueue(*args: Any, **kwargs: Any) -> None:

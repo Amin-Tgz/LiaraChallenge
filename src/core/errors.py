@@ -33,6 +33,8 @@ class ErrorCode(StrEnum):
     FAQ_GENERATION_FAILED = "FAQ_GENERATION_FAILED"
     FAQ_OUTPUT_INVALID = "FAQ_OUTPUT_INVALID"
     INPUT_TOO_LARGE = "INPUT_TOO_LARGE"
+    HISTORY_LIMIT_REACHED = "HISTORY_LIMIT_REACHED"
+    SKILL_NOT_AVAILABLE = "SKILL_NOT_AVAILABLE"
     UNAUTHORIZED = "UNAUTHORIZED"
     INVALID_REQUEST = "INVALID_REQUEST"
     JOB_FAILED = "JOB_FAILED"
@@ -207,6 +209,31 @@ ERROR_SPECS: dict[ErrorCode, ErrorSpec] = {
         http_status=413,
         message_fa="ورودی از حد مجاز بلندتر است. لطفاً سؤال را کوتاه‌تر کنید.",
         operator_action="Expected — check limits if legitimate questions are rejected.",
+        transient=False,
+    ),
+    ErrorCode.HISTORY_LIMIT_REACHED: ErrorSpec(
+        code=ErrorCode.HISTORY_LIMIT_REACHED,
+        http_status=409,
+        message_fa=(
+            "این گفت‌وگو به سقف نوبت‌های مجاز رسیده است. " "پرسش بعدی را در یک گفت‌وگوی تازه بپرسید."
+        ),
+        operator_action=(
+            "Expected conversation boundary; the client should move the draft "
+            "to a fresh landing question."
+        ),
+        transient=False,
+    ),
+    ErrorCode.SKILL_NOT_AVAILABLE: ErrorSpec(
+        code=ErrorCode.SKILL_NOT_AVAILABLE,
+        http_status=503,
+        message_fa=(
+            "فایل Skill در این استقرار در دسترس نیست. "
+            "این مشکل از بستهٔ استقرار است؛ لطفاً بعداً دوباره تلاش کنید."
+        ),
+        operator_action=(
+            "Ensure SKILL_FILE_PATH points to the tracked Skill and the deployment "
+            "artifact includes .agents/skills/liara-docs-rescue."
+        ),
         transient=False,
     ),
     ErrorCode.UNAUTHORIZED: ErrorSpec(

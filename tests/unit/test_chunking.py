@@ -176,6 +176,10 @@ def test_an_oversized_block_is_split_against_the_configured_maximum() -> None:
 
     assert len(result) > 1
     assert all(chunk.token_count <= settings.chunk_max_tokens for chunk in result)
+    assert result[0].extra_metadata["truncated_start"] is False
+    assert result[0].extra_metadata["truncated_end"] is True
+    assert result[-1].extra_metadata["truncated_start"] is True
+    assert result[-1].extra_metadata["truncated_end"] is False
 
 
 def test_bounds_come_from_configuration_not_from_code() -> None:

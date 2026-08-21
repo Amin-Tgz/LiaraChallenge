@@ -199,6 +199,31 @@ async def _start_job(
         # the work; doing either again would double both.
         return job, False
 
+    user_turns = (
+        await db.execute(
+            select(func.count(Message.id)).where(
+                Message.conversation_id == conversation.id,
+                Message.role == MessageRole.USER.value,
+            )
+        )
+    ).scalar_one()
+    settings = get_settings()
+    if user_turns >= settings.max_conversation_turns:
+        # create_or_get_job flushed a provisional row. Roll it back so bypassing
+        # the UI cannot leave an unprocessable fourth job behind.
+        await db.rollback()
+        raise RescueError(
+            ErrorCode.HISTORY_LIMIT_REACHED,
+            detail=(
+                f"conversation already has {user_turns} user turns; "
+                f"configured limit is {settings.max_conversation_turns}"
+            ),
+            context={
+                "limit": settings.max_conversation_turns,
+                "received": int(user_turns) + 1,
+            },
+        )
+
     db.add(
         Message(
             conversation_id=conversation.id,

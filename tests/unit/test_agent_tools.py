@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
 import pytest
@@ -12,8 +13,10 @@ from src.services.agent_tools import (
     AgentToolName,
     AgentToolRegistry,
     ToolInput,
+    _chunk_evidence,
     build_documentation_tool_registry,
 )
+from src.services.retrieval import RetrievalResult
 
 
 def test_exactly_three_tools_are_declared_as_native_functions() -> None:
@@ -121,3 +124,30 @@ async def test_session_profile_is_reused_as_a_soft_retrieval_hint(
     await registry.execute("search_docs", {"query": "deploy"})
 
     assert seen_runtimes == ["python", "nodejs"]
+
+
+def test_search_citation_uses_explicit_page_title_not_nested_breadcrumbs() -> None:
+    result = RetrievalResult(
+        chunk_id=uuid.uuid4(),
+        index_version_id=uuid.uuid4(),
+        similarity=0.8,
+        text="evidence",
+        metadata={
+            "page_title": "استقرار برنامه NextJS در لیارا",
+            "section_title": "اجرای اسکریپت start",
+            "breadcrumbs": [
+                "استقرار برنامه NextJS در لیارا",
+                "mirror لیارا",
+                "اجرای اسکریپت start",
+            ],
+        },
+        images=[],
+        source_url="https://docs.liara.ir/paas/nextjs/how-tos/deploy-app",
+        heading_anchor="start-script",
+        source_commit="a" * 40,
+    )
+
+    evidence = _chunk_evidence(result)
+
+    assert evidence["citation"]["page_title"] == "استقرار برنامه NextJS در لیارا"
+    assert evidence["citation"]["section_title"] == "اجرای اسکریپت start"

@@ -202,3 +202,26 @@ correctly-cited answer.
       wrapping it; verify a troubleshooting question returns prerequisite and fix content
       ahead of definitional content. Observed: `diagnose` on the SSL failure returned mostly
       "what SSL is" and none of the three passages that actually resolved it.
+
+## 20. User-reported rescue-flow quality pass
+
+- [ ] 20.1 Add a configurable stronger threshold for short FAQ queries and deduplicate
+      normalized FAQ questions; verify `سلام` returns no Celery result and equivalent FAQ
+      questions occupy one result slot.
+- [ ] 20.2 Increase FAQ candidates per document from 5 to 15, add a configurable structured
+      output-token budget, and add forced per-document atomic regeneration; verify existing
+      entries survive a failed replacement and a successful replacement deactivates them.
+- [ ] 20.3 Redesign the Persian RTL UI using the adopted blue/gold 8pt system, responsive
+      surfaces, complete interaction states, and a persisted light/dark toggle; verify WCAG
+      contrast, keyboard focus, mobile layout, console, and network state with Playwright.
+- [ ] 20.4 Submit both question textareas with Enter and preserve multiline entry with
+      Shift+Enter and IME composition; verify each keyboard path.
+- [ ] 20.5 Rename the Skill path, expose the canonical Skill as a real downloadable Markdown
+      attachment, and verify the documented URL does not return SPA HTML.
+- [ ] 20.6 Replace the generic MCP instructions with branded, expandable host guides for
+      Claude Code, Cursor, Codex, Open WebUI, Jan, and AnythingLLM, grounded in current
+      official documentation.
+- [ ] 20.7 Add a persistent top-left home control on non-home routes and preserve the current
+      question while navigating backward through the rescue flow.
+- [ ] 20.8 Cap chat at three configurable user turns in both API and UI; verify a next question
+      creates no old-conversation job and arrives prefilled in the landing question field.

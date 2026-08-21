@@ -128,3 +128,57 @@ async def test_faq_matching_suppresses_weak_results_and_preserves_semantic_simil
     assert matches[0].citation_url == "https://docs.liara.ir/paas/deploy#deploy"
     assert weak["id"] not in {match.faq_item_id for match in matches}
     assert all(not hasattr(match, "distance") for match in matches)
+
+
+async def test_short_ambiguous_query_uses_the_stronger_configured_threshold(
+    migrated: AsyncConnection,
+) -> None:
+    celery = _faq_values(
+        question="سلری چیست؟",
+        priority=0,
+        embedding=_vector(0.41, math.sqrt(1 - 0.41**2)),
+    )
+    await migrated.execute(FaqItem.__table__.insert().values(**celery))
+    settings = Settings(
+        _env_file=None,
+        faq_similarity_threshold=0.4,
+        faq_short_query_max_chars=8,
+        faq_short_query_similarity_threshold=0.6,
+    )
+
+    matches = await match_faqs(
+        migrated,
+        "سلام",
+        StubEmbeddings(query_vector=_vector(1.0)),
+        settings=settings,
+    )
+
+    assert matches == []
+
+
+async def test_equivalent_faq_questions_only_consume_one_result_slot(
+    migrated: AsyncConnection,
+) -> None:
+    first = _faq_values(question="سلری چیست؟", priority=1, embedding=_vector(1.0))
+    duplicate = _faq_values(question="سلری چیست؟", priority=0, embedding=_vector(1.0))
+    distinct = _faq_values(
+        question="ردیس چیست؟",
+        priority=0,
+        embedding=_vector(0.9, math.sqrt(1 - 0.9**2)),
+    )
+    await migrated.execute(FaqItem.__table__.insert(), [first, duplicate, distinct])
+    settings = Settings(
+        _env_file=None,
+        faq_similarity_threshold=0.4,
+        faq_top_k=2,
+        faq_candidate_multiplier=3,
+    )
+
+    matches = await match_faqs(
+        migrated,
+        "سلری چطور کار می‌کند؟",
+        StubEmbeddings(query_vector=_vector(1.0)),
+        settings=settings,
+    )
+
+    assert [match.question for match in matches] == ["سلری چیست؟", "ردیس چیست؟"]

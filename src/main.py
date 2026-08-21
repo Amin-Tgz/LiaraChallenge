@@ -46,6 +46,7 @@ _RESERVED_PREFIXES = (
     "health/",
     "metrics",
     "mcp",
+    "skill/",
     "docs",
     "redoc",
     "openapi.json",
@@ -125,6 +126,20 @@ def create_app() -> FastAPI:
 
     app.include_router(health_router)
     app.include_router(api_router, prefix=API_PREFIX)
+
+    @app.get("/skill/SKILL.md", include_in_schema=False, response_model=None)
+    async def download_skill() -> FileResponse:
+        skill_path = Path(settings.skill_file_path)
+        if not skill_path.is_file():
+            raise RescueError(
+                ErrorCode.SKILL_NOT_AVAILABLE,
+                detail=f"configured Skill file does not exist: {skill_path}",
+            )
+        return FileResponse(
+            skill_path,
+            media_type="text/markdown; charset=utf-8",
+            filename="liara-docs-rescue-SKILL.md",
+        )
 
     mcp = build_mcp_server()
     app.state.mcp_server = mcp

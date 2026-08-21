@@ -5,6 +5,8 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import LandingView from './views/LandingView'
 import RelatedQuestionsView from './views/RelatedQuestionsView'
 import RescueToolsView from './views/RescueToolsView'
+import ToolGuideView from './views/ToolGuideView'
+import App from './App'
 import { JobProgress } from './components/JobProgress'
 import { Markdown } from './components/Markdown'
 import { Citations } from './components/Citations'
@@ -14,6 +16,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
   sessionStorage.clear()
+  localStorage.clear()
 })
 
 beforeEach(() => {
@@ -291,4 +294,74 @@ test('a failing search reports the cause and does not advance the flow', async (
     expect(screen.getByRole('alert').textContent).toContain('هنوز هیچ مستندی ایندکس نشده'),
   )
   expect(screen.queryByRole('heading', { name: 'پرسش‌های مرتبط' })).toBeNull()
+})
+
+test('Enter submits the landing question while Shift+Enter keeps a newline', async () => {
+  const user = userEvent.setup()
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    if (String(input).endsWith('/faq/search')) return jsonResponse(FAQ_RESULTS)
+    return jsonResponse([])
+  })
+  vi.stubGlobal('fetch', fetchMock)
+
+  render(
+    <MemoryRouter initialEntries={['/']}>
+      <Routes>
+        <Route path="/" element={<LandingView />} />
+        <Route path="/related" element={<RelatedQuestionsView />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  const field = screen.getByLabelText('سؤال شما')
+  await user.type(field, 'خط اول')
+  await user.keyboard('{Shift>}{Enter}{/Shift}')
+  expect((field as HTMLTextAreaElement).value).toContain('\n')
+  expect(fetchMock.mock.calls.filter(([input]) => String(input).endsWith('/faq/search'))).toHaveLength(0)
+
+  await user.keyboard('{Enter}')
+  await waitFor(() =>
+    expect(screen.getByRole('heading', { name: 'پرسش‌های مرتبط' })).toBeDefined(),
+  )
+})
+
+test('the Skill guide exposes a real downloadable file', () => {
+  render(
+    <MemoryRouter initialEntries={['/tools/skill']}>
+      <Routes>
+        <Route path="/tools/:tool" element={<ToolGuideView />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  const download = screen.getByRole('link', { name: 'دانلود فایل SKILL.md' })
+  expect(download.getAttribute('href')).toBe('/skill/SKILL.md')
+  expect(download.hasAttribute('download')).toBe(true)
+})
+
+test('the MCP guide provides a selectable card for each supported host', async () => {
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter initialEntries={['/tools/mcp']}>
+      <Routes>
+        <Route path="/tools/:tool" element={<ToolGuideView />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  for (const host of ['Claude Code', 'Cursor', 'Codex', 'Open WebUI', 'Jan', 'AnythingLLM']) {
+    expect(screen.getByText(host)).toBeDefined()
+  }
+  await user.click(screen.getByText('Claude Code'))
+  expect(screen.getByText(/claude mcp add --transport http/)).toBeDefined()
+})
+
+test('the explicit theme control persists the selected light or dark theme', async () => {
+  const user = userEvent.setup()
+  render(<App />)
+
+  const toggle = screen.getByRole('button', { name: 'فعال‌کردن حالت تیره' })
+  await user.click(toggle)
+  expect(document.documentElement.dataset.theme).toBe('dark')
+  expect(localStorage.getItem('rescue.theme')).toBe('dark')
 })

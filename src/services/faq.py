@@ -101,6 +101,7 @@ class GatewayFaqGenerator:
         payload = {
             "model": self.settings.faq_llm_model,
             "reasoning_effort": self.settings.faq_reasoning_effort,
+            "max_completion_tokens": self.settings.faq_max_output_tokens,
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {
@@ -351,6 +352,11 @@ async def match_faqs(
     normalized = normalize_query(query)
     if not normalized:
         raise RescueError(ErrorCode.INVALID_REQUEST, detail="FAQ query is empty")
+    threshold = (
+        settings.faq_short_query_similarity_threshold
+        if len(normalized) <= settings.faq_short_query_max_chars
+        else settings.faq_similarity_threshold
+    )
     query_vector = await asyncio.to_thread(embeddings.embed_one, normalized)
     if len(query_vector) != settings.embedding_dimensions:
         raise RescueError(
@@ -382,10 +388,10 @@ async def match_faqs(
         .where(
             FaqItem.is_active.is_(True),
             FaqItem.embedding.is_not(None),
-            similarity >= settings.faq_similarity_threshold,
+            similarity >= threshold,
         )
         .order_by(ranking_score.desc(), similarity.desc(), FaqItem.id)
-        .limit(limit)
+        .limit(limit * settings.faq_candidate_multiplier)
     )
     try:
         rows = (await executor.execute(statement)).all()
@@ -395,29 +401,38 @@ async def match_faqs(
             detail="Postgres failed while matching FAQ question embeddings",
         ) from err
 
-    matches = [
-        FaqMatch(
-            faq_item_id=row.id,
-            question=row.question,
-            answer=row.answer,
-            similarity=float(row.similarity),
-            ranking_score=float(row.ranking_score),
-            priority=row.priority,
-            source_url=row.source_url,
-            heading_anchor=row.heading_anchor,
-            source_commit=row.source_commit,
-            tags=list(row.tags or []),
+    matches: list[FaqMatch] = []
+    seen_questions: set[str] = set()
+    for row in rows:
+        question_key = normalize_text(row.question)
+        if question_key in seen_questions:
+            continue
+        seen_questions.add(question_key)
+        matches.append(
+            FaqMatch(
+                faq_item_id=row.id,
+                question=row.question,
+                answer=row.answer,
+                similarity=float(row.similarity),
+                ranking_score=float(row.ranking_score),
+                priority=row.priority,
+                source_url=row.source_url,
+                heading_anchor=row.heading_anchor,
+                source_commit=row.source_commit,
+                tags=list(row.tags or []),
+            )
         )
-        for row in rows
-    ]
+        if len(matches) == limit:
+            break
     logger.info(
         "FAQ similarity matching completed",
         extra={
             "result_count": len(matches),
             "top_similarity": matches[0].similarity if matches else None,
-            "similarity_threshold": settings.faq_similarity_threshold,
+            "similarity_threshold": threshold,
             "top_k": limit,
             "priority_weight": settings.faq_priority_weight,
+            "deduplicated_candidates": len(rows) - len(matches),
         },
     )
     return matches
@@ -452,6 +467,7 @@ async def generate_document_faqs(
     generator: FaqGenerator,
     *,
     settings: Settings | None = None,
+    force: bool = False,
 ) -> FaqGenerationReport:
     settings = settings or get_settings()
     document = (
@@ -477,7 +493,7 @@ async def generate_document_faqs(
             .limit(1)
         )
     ).first()
-    if already_generated is not None:
+    if already_generated is not None and not force:
         return FaqGenerationReport(document_id=document_id, accepted=0, rejected=0, skipped=True)
 
     chunks = (
@@ -504,15 +520,18 @@ async def generate_document_faqs(
     parsed = parse_generated_faqs(raw, {row.ordinal for row in chunks})
     by_ordinal = {row.ordinal: row for row in chunks}
 
-    await executor.execute(
-        update(FaqItem)
-        .where(
-            FaqItem.source_url == document.source_url,
-            FaqItem.source_content_hash != document.content_hash,
+    accepted_candidates = parsed.accepted[: settings.faq_items_per_document]
+    if accepted_candidates:
+        stale_condition = (
+            FaqItem.source_document_id == document.id
+            if force
+            else (
+                (FaqItem.source_url == document.source_url)
+                & (FaqItem.source_content_hash != document.content_hash)
+            )
         )
-        .values(is_active=False)
-    )
-    for candidate in parsed.accepted[: settings.faq_items_per_document]:
+        await executor.execute(update(FaqItem).where(stale_condition).values(is_active=False))
+    for candidate in accepted_candidates:
         source_chunk = by_ordinal[candidate.chunk_ordinal]
         await executor.execute(
             FaqItem.__table__.insert().values(
@@ -566,6 +585,7 @@ async def generate_active_index_faqs(
     generator: FaqGenerator,
     *,
     settings: Settings | None = None,
+    force: bool = False,
 ) -> list[FaqGenerationReport]:
     settings = settings or get_settings()
     document_ids = (
@@ -588,6 +608,7 @@ async def generate_active_index_faqs(
                 document_id,
                 generator,
                 settings=settings,
+                force=force,
             )
         except SQLAlchemyError as err:
             raise RescueError(

@@ -304,10 +304,11 @@ Claude Code and Codex. See [`mcp.md`](mcp.md).
 > `liara logs`, never from the public response body, which in that state carries
 > the status code and nothing else.
 
-> **FAQ entries do not yet exist in production.** FAQ generation (task 8.6) ran
-> against the local database only, so the FAQ fast path and the MCP
-> `related_questions` field are both empty against the deployed index. Documentation
-> retrieval is unaffected. Run FAQ generation against Liara before the demo.
+> **Forced FAQ regeneration is explicit.** The normal command skips unchanged
+> source hashes. To rebuild the expanded corpus, run
+> `uv run python -m scripts.generate_faq --force`. Each document is replaced in
+> its own transaction: its old active entries remain available if generation or
+> validation fails, and are deactivated only when a valid replacement set commits.
 
 > **Account hygiene.** This account already hosts `royara-api`, `royara-db`, and `makeupapp`, which are unrelated to this project. Every name above is prefixed `liara-rescue-` so nothing collides, and no existing resource is touched.
 
@@ -322,6 +323,7 @@ Claude Code and Codex. See [`mcp.md`](mcp.md).
 APP_ENV=local
 LOG_LEVEL=INFO
 WEB_DIST_DIR=web/dist
+SKILL_FILE_PATH=.agents/skills/liara-docs-rescue/SKILL.md
 
 # --- Chat LLM ---
 LLM_BASE_URL=https://api.avalai.ir/v1
@@ -331,7 +333,8 @@ LLM_MODEL=gemini-3.7-flash
 # --- Bulk FAQ generation: separate var so it can diverge from chat ---
 FAQ_LLM_MODEL=gemini-3.7-flash
 FAQ_REASONING_EFFORT=low       # reasoning bills as output; keep bulk extraction cheap
-FAQ_ITEMS_PER_DOCUMENT=5
+FAQ_ITEMS_PER_DOCUMENT=15
+FAQ_MAX_OUTPUT_TOKENS=12288   # output room, not a required answer length
 FAQ_GENERATION_TIMEOUT_SECONDS=120
 FAQ_GENERATION_CONCURRENCY=20
 
@@ -376,9 +379,14 @@ INDEX_RETENTION_COUNT=2        # superseded versions kept; at least 1 or rollbac
 
 # --- Retrieval ---
 FAQ_SIMILARITY_THRESHOLD=0.4   # cosine SIMILARITY, not pgvector distance
+FAQ_SHORT_QUERY_MAX_CHARS=8
+FAQ_SHORT_QUERY_SIMILARITY_THRESHOLD=0.6   # suppress greetings matching unrelated FAQs
 FAQ_TOP_K=5
+FAQ_CANDIDATE_MULTIPLIER=4    # over-fetch so dedupe can still fill the requested slots
 FAQ_PRIORITY_WEIGHT=0.01       # ordering only: similarity + priority * weight; never changes exposed similarity
 RETRIEVAL_TOP_K=8
+RETRIEVAL_CANDIDATE_MULTIPLIER=3
+RETRIEVAL_DUPLICATE_THRESHOLD=0.9
 RETRIEVAL_SIMILARITY_THRESHOLD=0.25   # below this is NO_RESULTS_ABOVE_THRESHOLD
 RRF_K=60
 RRF_DENSE_WEIGHT=1.0
@@ -389,10 +397,11 @@ INDEX_STALE_AFTER_DAYS=14      # past this, answers carry INDEX_STALE
 # --- Agent bounds: enforced in the loop, never merely requested in the prompt ---
 AGENT_MAX_TOOL_CALLS=3
 AGENT_MAX_REWRITES=2
-AGENT_TOKEN_BUDGET=8000
+AGENT_TOKEN_BUDGET=32000
 AGENT_TIMEOUT_SECONDS=60
 MAX_QUESTION_CHARS=2000
-MAX_HISTORY_TURNS=20
+MAX_HISTORY_TURNS=3
+MAX_CONVERSATION_TURNS=3
 
 # --- Rate limiting ---
 RATE_LIMIT_PER_IP_PER_MINUTE=30
@@ -661,6 +670,8 @@ Every failure carries a stable machine code, a Persian user-facing message that 
 | `DOCUMENT_PARSE_FAILED` | MDX pre-pass produced no text for a non-empty source document | «یکی از صفحه‌های مستندات قابل پردازش نبود و ایندکس نشد. این یک خطای پردازش مستندات است، نه نبود پاسخ.» | Inspect that document's `discarded_char_ratio` and the unrecognized tags in the ingestion report; upstream likely added a component the §7 table misses |
 | `FAQ_GENERATION_FAILED` | FAQ model/gateway call failed for a document | «تولید پرسش‌های مرتبط از مستندات ناموفق بود. پرسش‌های معتبر قبلی همچنان در دسترس‌اند.» | Check the FAQ request and gateway response |
 | `FAQ_OUTPUT_INVALID` | One generated FAQ entry failed structured validation | «خروجی تولید پرسش‌های مرتبط ساختار معتبر نداشت و ذخیره نشد. سایر پرسش‌های معتبر پردازش شدند.» | Inspect recorded validation errors and source document |
+| `HISTORY_LIMIT_REACHED` | A client attempted another user turn after the configured conversation boundary | «این گفت‌وگو به سقف نوبت‌های مجاز رسیده است. پرسش بعدی را در یک گفت‌وگوی تازه بپرسید.» | Expected boundary; move the draft to the fresh-question flow |
+| `SKILL_NOT_AVAILABLE` | The deployment artifact does not contain the configured Skill file | «فایل Skill در این استقرار در دسترس نیست.» | Check `SKILL_FILE_PATH` and deployment inclusion of `.agents/skills/liara-docs-rescue` |
 
 `NO_ACTIVE_INDEX` (system broken) and `NO_RESULTS_ABOVE_THRESHOLD` (working correctly, real docs gap) must **never** share a message. One is an outage; the other is your product's most valuable data.
 

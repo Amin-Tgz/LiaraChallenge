@@ -145,6 +145,9 @@ class AgentToolRegistry:
 
 
 def _page_title(metadata: Mapping[str, Any]) -> str | None:
+    explicit = metadata.get("page_title")
+    if explicit:
+        return str(explicit)
     breadcrumbs = [str(value) for value in metadata.get("breadcrumbs") or []]
     section = metadata.get("section_title")
     if section and breadcrumbs and breadcrumbs[-1] == section:
@@ -293,11 +296,13 @@ def build_documentation_tool_registry(
                 "images": list(row.DocumentChunk.images or []),
                 "metadata": {
                     "source_path": row.DocumentChunk.source_path,
+                    "page_title": row.title,
                     "section_title": row.DocumentChunk.section_title,
                     "breadcrumbs": list(row.DocumentChunk.breadcrumbs or []),
                     "service": row.DocumentChunk.service,
                     "runtime": row.DocumentChunk.runtime,
                     "framework": row.DocumentChunk.framework,
+                    **dict(row.DocumentChunk.extra_metadata or {}),
                 },
                 "citation": {
                     "url": (

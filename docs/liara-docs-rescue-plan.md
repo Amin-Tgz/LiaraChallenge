@@ -177,6 +177,9 @@ Feedback باید برای analytics و بهبود ranking ذخیره شود.
 - منابع با عنوان صفحه، section، لینک و نسخه‌ی مستندات نمایش داده شوند.
 - اگر chunk دارای تصویر است، تصویر مرتبط در کنار همان مرحله یا citation نمایش داده شود.
 - وضعیت‌های `queued`، `retrieving`، `generating`، `retrying`، `completed` و `failed` در UI قابل‌فهم باشند.
+- هر گفت‌وگو حداکثر سه نوبت کاربر دارد؛ پرسش بعدی به کادر «سؤال شما» در یک جریان تازه منتقل شود.
+- Enter پرسش را ارسال کند، Shift+Enter خط جدید بسازد و composition ورودی فارسی ناخواسته submit نشود.
+- تم روشن/تیره با انتخاب صریح کاربر و نگه‌داری آن در مرورگر در دسترس باشد.
 
 ---
 
@@ -206,7 +209,9 @@ Feedback باید برای analytics و بهبود ranking ذخیره شود.
 - سؤال تکمیلی فقط وقتی پاسخ را عوض می‌کند.
 - session technical profile.
 - Skill قابل‌نصب و قابل‌استفاده.
+- صفحهٔ Skill یک فایل واقعی `SKILL.md` برای دانلود و مسیرهای نصب روشن ارائه کند.
 - MCP قابل‌نصب و قابل‌استفاده — **اولویت آخر در ترتیب اجرا**، چون به API مستقرشده وابسته است.
+- راهنمای MCP برای Claude Code، Cursor، Codex، Open WebUI، Jan و AnythingLLM مسیر تنظیمات مخصوص همان میزبان را نشان دهد.
 - پنل ادمین: احراز هویت، مدیریت FAQ، threshold، دکمه‌ی sync.
 - داشبورد سبک quality/cost/failure.
 - Portkey gateway به‌عنوان یک app service روی لیارا، با retry، fallback و circuit breaking.

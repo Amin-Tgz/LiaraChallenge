@@ -12,7 +12,13 @@ import json
 import pytest
 
 from src.core.errors import ErrorCode, RescueError
-from src.mcp.server import SERVER_NAME, ToolError, build_mcp_server
+from src.mcp.server import (
+    SERVER_NAME,
+    ToolError,
+    build_diagnostic_query,
+    build_mcp_server,
+    merge_diagnostic_evidence,
+)
 from src.services.agent_tools import AGENT_TOOL_NAMES
 
 EXPECTED_TOOLS = {"search", "get_document", "diagnose"}
@@ -103,3 +109,29 @@ def test_the_server_instructions_frame_retrieved_content_as_data(mcp) -> None:
 
 def test_the_server_announces_a_stable_name(mcp) -> None:
     assert mcp.name == SERVER_NAME == "liara-docs-rescue"
+
+
+def test_diagnostic_query_keeps_the_exact_error_and_requests_remediation() -> None:
+    query = build_diagnostic_query(
+        "گواهی SSL فعال نمی‌شود",
+        "domain is not verified",
+    )
+
+    assert "domain is not verified" in query
+    assert "رفع" in query
+    assert "پیش‌نیاز" in query
+
+
+def test_diagnose_promotes_distinct_remediation_evidence_within_the_budget() -> None:
+    definition = {"evidence_id": "definition"}
+    repeated = {"evidence_id": "same"}
+    fix = {"evidence_id": "fix"}
+    prerequisite = {"evidence_id": "prerequisite"}
+
+    merged = merge_diagnostic_evidence(
+        primary=[definition, repeated],
+        remediation=[fix, repeated, prerequisite],
+        limit=3,
+    )
+
+    assert [item["evidence_id"] for item in merged] == ["fix", "same", "prerequisite"]

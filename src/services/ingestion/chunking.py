@@ -437,6 +437,8 @@ class _Candidate:
     blocks: list[_Block]
     section: _Section
     is_step: bool
+    truncated_start: bool = False
+    truncated_end: bool = False
 
 
 def _body(blocks: list[_Block]) -> str:
@@ -465,9 +467,16 @@ def _pack(units: list[_Unit], section: _Section, settings: Settings) -> list[_Ca
     for unit in units:
         if unit.tokens > settings.chunk_max_tokens:
             flush()
+            pieces = _split_oversized(unit, settings)
             packed.extend(
-                _Candidate(blocks=piece, section=section, is_step=unit.is_step)
-                for piece in _split_oversized(unit, settings)
+                _Candidate(
+                    blocks=piece,
+                    section=section,
+                    is_step=unit.is_step,
+                    truncated_start=index > 0,
+                    truncated_end=index < len(pieces) - 1,
+                )
+                for index, piece in enumerate(pieces)
             )
             continue
         if current and _tokens_of(current) + unit.tokens > settings.chunk_target_tokens:
@@ -519,6 +528,8 @@ def _merge_undersized(
             blocks=first.blocks + second.blocks,
             section=first.section if tokens(first) >= tokens(second) else second.section,
             is_step=first.is_step or second.is_step,
+            truncated_start=first.truncated_start,
+            truncated_end=second.truncated_end,
         )
         del merged[max(choice, target)]
     return merged
@@ -646,6 +657,8 @@ def chunk_document(
                 extra_metadata={
                     "heading_level": section.level,
                     "block_kinds": sorted({block.kind for block in candidate.blocks}),
+                    "truncated_start": candidate.truncated_start,
+                    "truncated_end": candidate.truncated_end,
                     # False means mistune's token stream and the span scan
                     # disagreed and block typing fell back to regex — a signal
                     # that the shape of the pre-pass output has moved.

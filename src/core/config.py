@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     app_env: str = "local"
     log_level: str = "INFO"
     web_dist_dir: str = "web/dist"
+    skill_file_path: str = ".agents/skills/liara-docs-rescue/SKILL.md"
 
     # --- Chat LLM ---
     llm_base_url: str = "https://api.avalai.ir/v1"
@@ -33,7 +34,8 @@ class Settings(BaseSettings):
     # --- Bulk FAQ generation ---
     faq_llm_model: str = "gemini-3.7-flash"
     faq_reasoning_effort: str = "low"
-    faq_items_per_document: int = 5
+    faq_items_per_document: int = 15
+    faq_max_output_tokens: int = 12288
     faq_generation_timeout_seconds: float = 120.0
     faq_generation_concurrency: int = 20
 
@@ -85,9 +87,14 @@ class Settings(BaseSettings):
 
     # --- Retrieval ---
     faq_similarity_threshold: float = 0.4
+    faq_short_query_max_chars: int = 8
+    faq_short_query_similarity_threshold: float = 0.6
     faq_top_k: int = 5
+    faq_candidate_multiplier: int = 4
     faq_priority_weight: float = 0.01
     retrieval_top_k: int = 8
+    retrieval_candidate_multiplier: int = 3
+    retrieval_duplicate_threshold: float = 0.9
     retrieval_similarity_threshold: float = 0.25
     rrf_k: int = 60
     rrf_dense_weight: float = 1.0
@@ -107,7 +114,8 @@ class Settings(BaseSettings):
     agent_token_budget: int = 32000
     agent_timeout_seconds: float = 60.0
     max_question_chars: int = 2000
-    max_history_turns: int = 20
+    max_history_turns: int = 3
+    max_conversation_turns: int = 3
 
     # --- Queue, streaming, durability ---
     #: How many times a job may be attempted before it reaches the terminal
@@ -211,6 +219,26 @@ class Settings(BaseSettings):
             raise ValueError("FAQ_GENERATION_CONCURRENCY must be positive")
         return v
 
+    @field_validator(
+        "faq_items_per_document",
+        "faq_max_output_tokens",
+        "faq_candidate_multiplier",
+        "retrieval_candidate_multiplier",
+        "max_conversation_turns",
+    )
+    @classmethod
+    def _positive_configured_count(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("configured counts and generation budgets must be positive")
+        return v
+
+    @field_validator("faq_short_query_max_chars", "max_history_turns")
+    @classmethod
+    def _non_negative_history_or_short_query_bound(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("short-query and history bounds must be non-negative")
+        return v
+
     @field_validator("metrics_path")
     @classmethod
     def _absolute_metrics_path(cls, v: str) -> str:
@@ -269,7 +297,12 @@ class Settings(BaseSettings):
             raise ValueError("ranking weights must be non-negative")
         return v
 
-    @field_validator("faq_similarity_threshold", "retrieval_similarity_threshold")
+    @field_validator(
+        "faq_similarity_threshold",
+        "faq_short_query_similarity_threshold",
+        "retrieval_similarity_threshold",
+        "retrieval_duplicate_threshold",
+    )
     @classmethod
     def _cosine_similarity_range(cls, v: float) -> float:
         if not -1.0 <= v <= 1.0:

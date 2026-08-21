@@ -23,6 +23,16 @@ The system SHALL generate candidate question/answer pairs from indexed documents
 - **WHEN** a generated pair does not conform to the required structure
 - **THEN** it is rejected and recorded rather than stored, and the run continues
 
+#### Scenario: Generation capacity is configurable
+
+- **WHEN** the configured FAQ count and output-token budget are increased
+- **THEN** both values are sent to the generator without imposing a minimum answer length on questions that only need a short answer
+
+#### Scenario: Forced full regeneration is atomic per document
+
+- **WHEN** an operator requests regeneration for unchanged documents
+- **THEN** each document's prior active FAQ entries remain available until its replacement output validates and commits, after which only the replacement set stays active
+
 ### Requirement: Semantic matching against a threshold
 
 The system SHALL match an incoming question against stored FAQ questions by embedding similarity, returning at most the configured number of results, and SHALL NOT return results scoring below the configured similarity threshold.
@@ -41,6 +51,16 @@ The system SHALL match an incoming question against stored FAQ questions by embe
 
 - **WHEN** an administrator changes the similarity threshold
 - **THEN** subsequent matching uses the new value without redeployment
+
+#### Scenario: Short ambiguous input requires stronger evidence
+
+- **WHEN** a very short question such as a greeting has only weak semantic matches
+- **THEN** the configured short-query threshold suppresses those unrelated results
+
+#### Scenario: Duplicate questions are returned once
+
+- **WHEN** equivalent active FAQ questions originate from multiple documentation pages
+- **THEN** the response keeps the highest-ranked occurrence once and fills remaining slots with distinct questions when available
 
 ### Requirement: FAQ path is synchronous and does not generate
 

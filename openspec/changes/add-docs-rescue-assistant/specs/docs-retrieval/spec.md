@@ -46,6 +46,25 @@ Each retrieval result SHALL include its relevance score, chunk text, metadata, a
 - **WHEN** retrieval returns a result
 - **THEN** that result carries a score, its text, its source URL with anchor, and the index's source commit
 
+#### Scenario: Citation identity is stable
+
+- **WHEN** the same chunk is returned by search and then read through the document tool
+- **THEN** both surfaces report the same document page title and section title, with neither inferred from breadcrumb position
+
+#### Scenario: Truncation is explicit
+
+- **WHEN** a stored chunk starts or ends inside a larger split unit
+- **THEN** the result marks which edge is truncated so a caller knows to read the full section before relying on the missing context
+
+### Requirement: Retrieval evidence is diverse
+
+The system SHALL remove exact and near-duplicate passages from the ranked result set and SHALL use additional ranked candidates to fill the configured result budget with distinct evidence when available. The duplicate threshold and candidate multiplier SHALL be configurable.
+
+#### Scenario: Duplicate passages do not consume the budget
+
+- **WHEN** multiple documents contain the same or near-identical passage
+- **THEN** the highest-ranked occurrence is returned once and the freed result slots contain the next distinct passages
+
 ### Requirement: Metadata influences ranking without hiding evidence
 
 The system SHALL use chunk metadata for soft boosting by default. Hard filtering SHALL apply only when user intent for that attribute is explicit and reliable.

@@ -13,6 +13,7 @@ import time
 import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
+from difflib import SequenceMatcher
 from types import MappingProxyType
 from typing import Any, Protocol
 
@@ -24,7 +25,7 @@ from src.core.config import Settings, get_settings
 from src.core.errors import ErrorCode, RescueError
 from src.core.logging import get_logger
 from src.core.normalization import normalize_query
-from src.db.models import DocumentChunk, IndexVersion, UsageEvent
+from src.db.models import Document, DocumentChunk, IndexVersion, UsageEvent
 from src.db.models.enums import UsageEventType
 
 logger = get_logger(__name__)
@@ -273,6 +274,38 @@ def apply_metadata_boosts(
     )
 
 
+def _evidence_body(text: str) -> str:
+    """Ignore the synthetic breadcrumb header when comparing evidence bodies."""
+    _, separator, body = text.partition("\n\n")
+    return normalize_query(body if separator else text)
+
+
+def deduplicate_retrieval_results(
+    results: Sequence[FusedRetrievalResult],
+    *,
+    threshold: float,
+) -> list[FusedRetrievalResult]:
+    """Keep ranking order while removing exact and near-identical passages."""
+    accepted: list[FusedRetrievalResult] = []
+    accepted_bodies: list[str] = []
+    for result in results:
+        body = _evidence_body(result.text)
+        is_duplicate = any(
+            body == prior
+            or (
+                body
+                and prior
+                and SequenceMatcher(None, body, prior, autojunk=False).ratio() >= threshold
+            )
+            for prior in accepted_bodies
+        )
+        if is_duplicate:
+            continue
+        accepted.append(result)
+        accepted_bodies.append(body)
+    return accepted
+
+
 def _hard_filter_conditions(intent: RetrievalIntent | None) -> list[Any]:
     if intent is None:
         return []
@@ -309,7 +342,9 @@ def _dense_statement(
             DocumentChunk.language,
             DocumentChunk.images,
             DocumentChunk.extra_metadata,
+            Document.title.label("page_title"),
         )
+        .join(Document, Document.id == DocumentChunk.document_id)
         .join(IndexVersion, IndexVersion.id == DocumentChunk.index_version_id)
         .where(
             IndexVersion.is_active.is_(True),
@@ -383,6 +418,7 @@ async def dense_retrieve_by_vector(
             text=row.text,
             metadata={
                 "source_path": row.source_path,
+                "page_title": row.page_title,
                 "section_title": row.section_title,
                 "breadcrumbs": list(row.breadcrumbs or []),
                 "content_type": row.content_type,
@@ -504,7 +540,9 @@ async def lexical_retrieve(
             DocumentChunk.language,
             DocumentChunk.images,
             DocumentChunk.extra_metadata,
+            Document.title.label("page_title"),
         )
+        .join(Document, Document.id == DocumentChunk.document_id)
         .join(IndexVersion, IndexVersion.id == DocumentChunk.index_version_id)
         .where(
             IndexVersion.is_active.is_(True),
@@ -535,6 +573,7 @@ async def lexical_retrieve(
             text=row.text,
             metadata={
                 "source_path": row.source_path,
+                "page_title": row.page_title,
                 "section_title": row.section_title,
                 "breadcrumbs": list(row.breadcrumbs or []),
                 "content_type": row.content_type,
@@ -578,6 +617,9 @@ async def hybrid_retrieve(
     """Run dense and lexical retrieval, then return their RRF ordering."""
     settings = settings or get_settings()
     limit = top_k if top_k is not None else settings.retrieval_top_k
+    if limit <= 0:
+        raise RescueError(ErrorCode.INVALID_REQUEST, detail="retrieval top_k must be positive")
+    candidate_limit = limit * settings.retrieval_candidate_multiplier
     normalized = normalize_query(query)
     if not normalized:
         raise RescueError(ErrorCode.INVALID_REQUEST, detail="retrieval query is empty")
@@ -587,14 +629,14 @@ async def hybrid_retrieve(
         executor,
         query_vector,
         settings=settings,
-        top_k=limit,
+        top_k=candidate_limit,
         intent=intent,
     )
     lexical = await lexical_retrieve(
         executor,
         normalized,
         settings=settings,
-        top_k=limit,
+        top_k=candidate_limit,
         intent=intent,
     )
     dense_ids = {result.chunk_id for result in dense}
@@ -609,9 +651,13 @@ async def hybrid_retrieve(
         lexical,
         settings=settings,
         lexical_similarities=lexical_similarities,
-    )[:limit]
+    )
     if intent is not None and intent.profile_hints:
         fused = apply_metadata_boosts(fused, intent, settings=settings)
+    fused = deduplicate_retrieval_results(
+        fused,
+        threshold=settings.retrieval_duplicate_threshold,
+    )[:limit]
     logger.info(
         "hybrid retrieval fused",
         extra={
@@ -619,6 +665,7 @@ async def hybrid_retrieve(
             "dense_count": len(dense),
             "lexical_count": len(lexical),
             "result_count": len(fused),
+            "candidate_limit": candidate_limit,
             "top_similarity": fused[0].similarity if fused else None,
             "rrf_k": settings.rrf_k,
             "dense_weight": settings.rrf_dense_weight,

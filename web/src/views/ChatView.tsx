@@ -8,7 +8,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useLocation, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   ApiError,
   getConversation,
@@ -20,6 +20,10 @@ import { useJobStream } from '../api/useJobStream'
 import { Citations } from '../components/Citations'
 import { JobProgress } from '../components/JobProgress'
 import { Markdown } from '../components/Markdown'
+import { rememberNextQuestion } from '../flow'
+import { submitTextareaOnEnter } from '../keyboard'
+
+const MAX_USER_TURNS = 3
 
 /** A job still owed an answer, if the conversation has one. */
 function activeJob(jobs: Job[]): Job | null {
@@ -37,6 +41,7 @@ function activeJob(jobs: Job[]): Job | null {
 export default function ChatView() {
   const { conversationId = '' } = useParams()
   const location = useLocation()
+  const navigate = useNavigate()
   const passed = (location.state ?? {}) as { jobId?: string }
 
   const [conversation, setConversation] = useState<ConversationDetail | null>(null)
@@ -81,6 +86,12 @@ export default function ChatView() {
     event.preventDefault()
     const text = followUp.trim()
     if (!text) return
+    const userTurns = conversation?.messages.filter((message) => message.role === 'user').length ?? 0
+    if (userTurns >= MAX_USER_TURNS) {
+      rememberNextQuestion(text)
+      navigate('/')
+      return
+    }
     setError(null)
     try {
       const response = await sendMessage(conversationId, text, newIdempotencyKey())
@@ -88,6 +99,11 @@ export default function ChatView() {
       setJobId(response.job.id)
       await load()
     } catch (cause) {
+      if (cause instanceof ApiError && cause.code === 'HISTORY_LIMIT_REACHED') {
+        rememberNextQuestion(text)
+        navigate('/')
+        return
+      }
       setError(
         cause instanceof ApiError ? cause.message : 'ارتباط با سرویس برقرار نشد.',
       )
@@ -119,10 +135,19 @@ export default function ChatView() {
   )
   // While a job runs, its partial answer is not yet a persisted message.
   const streaming = jobId !== null && !stream.done && stream.answer.length > 0
+  const userTurns = conversation.messages.filter((message) => message.role === 'user').length
+  const atTurnLimit = userTurns >= MAX_USER_TURNS
+  const jobRunning = jobId !== null && !stream.done
 
   return (
     <main className="shell chat">
-      <h1>گفت‌وگو</h1>
+      <div className="chat-heading">
+        <div>
+          <span className="eyebrow">پاسخ مبتنی بر شواهد</span>
+          <h1>گفت‌وگو</h1>
+        </div>
+        <span className="turn-counter">نوبت {Math.min(userTurns, MAX_USER_TURNS)} از {MAX_USER_TURNS}</span>
+      </div>
       <p className="original-question">
         <span className="label">سؤال اصلی:</span> {conversation.initial_question}
       </p>
@@ -157,17 +182,32 @@ export default function ChatView() {
         />
       )}
 
-      <form onSubmit={ask} className="follow-up">
-        <label htmlFor="follow-up">سؤال بعدی</label>
+      <form onSubmit={ask} className={'follow-up' + (atTurnLimit ? ' turn-boundary' : '')}>
+        {atTurnLimit && (
+          <div className="boundary-note" role="note">
+            <strong>این گفت‌وگو به سه نوبت رسید.</strong>
+            <span>پرسش بعدی شما به کادر «سؤال شما» منتقل و به‌صورت مستقل جست‌وجو می‌شود.</span>
+          </div>
+        )}
+        <label htmlFor="follow-up">{atTurnLimit ? 'پرسش تازه' : 'سؤال بعدی'}</label>
+        <p id="follow-up-hint" className="field-hint">
+          Enter برای ارسال و Shift+Enter برای خط جدید.
+        </p>
         <textarea
           id="follow-up"
           rows={3}
           value={followUp}
           onChange={(event) => setFollowUp(event.target.value)}
-          placeholder="اگر بخشی از پاسخ روشن نبود، همین‌جا بپرسید."
+          onKeyDown={submitTextareaOnEnter}
+          aria-describedby="follow-up-hint"
+          placeholder={
+            atTurnLimit
+              ? 'پرسش بعدی را بنویسید تا در یک جست‌وجوی تازه باز شود.'
+              : 'اگر بخشی از پاسخ روشن نبود، همین‌جا بپرسید.'
+          }
         />
-        <button type="submit" disabled={followUp.trim().length === 0}>
-          بپرس
+        <button type="submit" disabled={followUp.trim().length === 0 || jobRunning}>
+          {atTurnLimit ? 'انتقال به پرسش تازه' : jobRunning ? 'در حال پاسخ…' : 'بپرس'}
         </button>
       </form>
 
