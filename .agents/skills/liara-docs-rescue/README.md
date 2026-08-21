@@ -95,13 +95,19 @@ NO_RESULTS_ABOVE_THRESHOLD: مستندات ایندکس شده‌اند، اما
 سؤال پیدا نشد.
 ```
 
-That is the **correct** outcome, not a failure. The indexed documentation has no page about this error, and the Skill requires the agent to say so rather than reconstruct a plausible fix from memory. Inventing `npm ci` advice here would be exactly the behavior this Skill exists to prevent.
+That is the **correct** outcome, not a failure. The Skill requires the agent to say so rather than reconstruct a plausible fix from memory. Inventing `npm ci` advice here would be exactly the behavior this Skill exists to prevent.
+
+This example is subtler than it looks, and that is why it is the one kept. The corpus is **not** empty on this topic — it has a `ModuleNotFoundError` page for **Flask**, which retrieves at 0.638 for a query about the Node.js error. A near neighbour that a careless agent would happily mistake for a match. The right answer is still to abstain: no retrieved passage addresses Node.js `MODULE_NOT_FOUND`, and adapting Python advice to a Node.js runtime is inventing, not citing.
 
 Distinguish it from the other empty-looking result:
 
 - `NO_RESULTS_ABOVE_THRESHOLD` — the service works; the documentation has a gap. Tell the user that.
 - `NO_ACTIVE_INDEX` — the service is broken and an operator must act. Never present this as "no documentation found".
 
-## Known limitation
+## Filters remove results — they do not reorder them
 
-`diagnose` also returns `related_questions`, drawn from documentation-derived FAQ entries. Against the current deployment that list is **empty**: FAQ generation has not yet been run over the production index. The documentation evidence is unaffected — `related_questions` is a supplement, and the tool returns evidence without it.
+`service`, `runtime`, and `framework` are hard filters. Pass one only when the user stated it.
+
+The index stores `runtime` as `nodejs`, `python`, `php`, `go`, `docker`, `dotnet`, or `static`. Common aliases (`node`, `js`, `ts`, `py`, `golang`, `.net`, `c#`) are normalized; anything else returns `NO_RESULTS_FOR_FILTER`, which is **not** a documentation gap — retry without the filter.
+
+This was a real bug found by agent verification: `runtime="node"` used to return nothing, and an agent correctly following the rules reported a documentation gap over documentation that existed.

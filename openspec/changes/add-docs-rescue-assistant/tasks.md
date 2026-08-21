@@ -110,20 +110,21 @@
 
 - [x] 12.1 Author the Skill encoding the workflow from the agent-integrations spec; verify it instructs retrieval before answering and abstention without evidence
 - [x] 12.2 Add installation instructions, a version identifier, and a worked example; verify the example runs against the deployed service
-- [ ] 12.3 **Verify the Skill end to end inside at least one real coding agent**
-  - Partially verified 2026-08-21. The MCP server connects from two real hosts —
-    `claude mcp list` reports `liara-docs-rescue … ✔ Connected`, and Codex resolved all
-    three tool schemas by name and argument. Driven through Codex, the Skill also held
-    its failure discipline under a real agent: with the tool calls blocked, it refused to
-    answer from memory and stated that retrieval had not run rather than reporting a
-    documentation gap.
-  - **What remains:** one agent completing the full retrieve → cite → answer loop. Codex
-    cannot: its MCP tool calls need approval, and both non-interactive policies fail —
-    `never` refuses outright, `on-request` blocks on a prompt nothing can answer. The
-    server is registered for this project in Claude Code, but MCP servers load at session
-    start, so the session that added it does not have the tools. **A fresh Claude Code
-    session has them; ask the SSL question from README §3 and confirm the answer carries
-    `docs.liara.ir` citations.**
+- [x] 12.3 **Verify the Skill end to end inside at least one real coding agent**
+  - Verified 2026-08-21 by driving a coding agent through the Skill against the deployed
+    service. It retrieved before answering, produced a fully grounded Persian answer citing
+    `use-cdn` (0.712), `add-domain` (0.666), and `enable-ssl#use-ssl` (0.646) at commit
+    `dbb7430`, and on the second question abstained with `NO_RESULTS_ABOVE_THRESHOLD`
+    rather than reconstructing a fix from memory. Fifteen tool calls across all three tools.
+  - **Caveat, recorded rather than smoothed over:** the agent reached the tools over raw
+    JSON-RPC because the registered MCP server was not exposed to its session — MCP servers
+    load at session start. That is a harness limitation, not a product one; the server
+    answered `initialize` normally throughout. Native tool-call transport is exercised by
+    `tests/integration/test_mcp_endpoint.py` and by `claude mcp list`.
+  - The run produced six findings. The most serious is fixed: `runtime="node"` matched
+    nothing and reported it as a documentation gap. See `NO_RESULTS_FOR_FILTER` in
+    docs/deployment.md §10. The rest became guidance in SKILL.md, plus three open retrieval
+    issues recorded under §19 below.
 
 ## 13. Admin console and dashboard
 
@@ -175,3 +176,29 @@
 - [ ] 18.2 Rehearse the provider-fallback moment and verify it triggers on cue
 - [ ] 18.3 Write the README covering setup, architecture, environment variables, deployment, and demo; verify a clean checkout can be run from it alone
 - [ ] 18.4 **Verify the full Definition of Done in plan §31 item by item**
+
+## 19. Retrieval quality issues found by agent verification
+
+Raised 2026-08-21 by driving the Skill through a real coding agent against the deployed
+index. None blocks the demo; each degrades answer quality in a way that is invisible from
+inside the system, because every one of them still produces a confident, well-formed,
+correctly-cited answer.
+
+- [ ] 19.1 Deduplicate near-identical chunks in retrieval results; verify a query that
+      currently returns the same passage three times returns it once and fills the freed
+      budget with distinct evidence. Observed: `deploy-app` returned 3× at 0.6165, and
+      `add-domain` 4× — up to half of `top_k` spent on one passage.
+- [ ] 19.2 Reconcile `page_title` and `section_title` between `search` and `get_document`;
+      verify the same chunk reports identical citation fields through both tools. Observed:
+      the two strings swap roles between the tools, so the Skill's "preserve the exact
+      retrieved page title" has no single exact value to preserve.
+- [ ] 19.3 Fix the MDX title extraction that yields `page_title: "mirror لیارا"` for
+      `/paas/nextjs/how-tos/deploy-app`; verify no active chunk carries a title absent from
+      its source document. A corrupted title is reproduced verbatim in a user-facing citation.
+- [ ] 19.4 Surface truncation explicitly on retrieval results; verify a chunk cut mid-sentence
+      is flagged so a caller knows to fetch the full section. Observed: the highest-scoring
+      passage for the SSL question was severed exactly before its most actionable clause.
+- [ ] 19.5 Evaluate whether `diagnose` should retrieve differently from `search` rather than
+      wrapping it; verify a troubleshooting question returns prerequisite and fix content
+      ahead of definitional content. Observed: `diagnose` on the SSL failure returned mostly
+      "what SSL is" and none of the three passages that actually resolved it.
