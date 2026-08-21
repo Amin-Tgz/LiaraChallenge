@@ -128,12 +128,12 @@
 
 ## 13. Admin console and dashboard
 
-- [ ] 13.1 Implement HTTP Basic auth from environment credentials; verify unauthenticated requests are refused and disclose nothing
-- [ ] 13.2 Implement FAQ review, edit, and delete with re-embedding on question change; verify a deleted entry stops appearing in user results
-- [ ] 13.3 Implement the incremental sync trigger; verify a no-change run reports no change and a failed run leaves the active index untouched
-- [ ] 13.4 Implement runtime configuration of the similarity threshold; verify a change affects subsequent matching without redeployment
-- [ ] 13.5 Implement the dashboard covering FAQ resolution rate, tool split, unresolved questions and their pages, failures by error code, token usage and cost, fallback count, and index version and commit; verify every figure derives from recorded events
-- [ ] 13.6 Verify metrics with no recorded events display an explicit no-data state rather than a fabricated value
+- [x] 13.1 Implement HTTP Basic auth from environment credentials; verify unauthenticated requests are refused and disclose nothing
+- [x] 13.2 Implement FAQ review, edit, and delete with re-embedding on question change; verify a deleted entry stops appearing in user results
+- [x] 13.3 Implement the incremental sync trigger; verify a no-change run reports no change and a failed run leaves the active index untouched
+- [x] 13.4 Implement runtime configuration of the similarity threshold; verify a change affects subsequent matching without redeployment
+- [x] 13.5 Implement the dashboard covering FAQ resolution rate, tool split, unresolved questions and their pages, failures by error code, token usage and cost, fallback count, and index version and commit; verify every figure derives from recorded events
+- [x] 13.6 Verify metrics with no recorded events display an explicit no-data state rather than a fabricated value
 
 ## 14. Platform operations
 

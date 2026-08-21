@@ -14,6 +14,7 @@ from src.api.deps import rate_limited
 from src.db.session import get_session
 from src.services.embeddings import EmbeddingClient
 from src.services.faq import FaqEmbeddingProvider, match_faqs
+from src.services.runtime_config import effective_settings
 
 router = APIRouter(prefix="/faq", tags=["faq"])
 
@@ -54,7 +55,10 @@ async def search_faq(
     embeddings: Annotated[FaqEmbeddingProvider, Depends(get_faq_embeddings)],
     _: Annotated[object, Depends(rate_limited)] = None,
 ) -> FaqSearchResponse:
-    matches = await match_faqs(session, payload.question, embeddings)
+    # Read the threshold per request rather than at import, so an admin
+    # change takes effect on the next question instead of the next deploy.
+    settings = await effective_settings(session)
+    matches = await match_faqs(session, payload.question, embeddings, settings=settings)
     return FaqSearchResponse(
         results=[
             FaqSearchResult(

@@ -21,6 +21,7 @@ from src.db.models.corpus import (
     IndexVersion,
 )
 from src.db.models.faq import FaqItem
+from src.db.models.settings import RuntimeSetting
 
 __all__ = [
     "EMBEDDING_DIM",
@@ -35,6 +36,7 @@ __all__ = [
     "IndexVersion",
     "Message",
     "RequestJob",
+    "RuntimeSetting",
     "TimestampMixin",
     "UsageEvent",
 ]
