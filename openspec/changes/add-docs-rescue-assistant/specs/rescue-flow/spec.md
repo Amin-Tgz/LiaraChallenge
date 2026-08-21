@@ -149,6 +149,20 @@ The interface SHALL offer accessible light and dark themes, initialize from the 
 - **WHEN** a user is on any step after the landing view
 - **THEN** a keyboard-accessible control in the top-left header returns to the home question view
 
+### Requirement: Rescue illustrations and visible thinking state
+
+The landing and rescue-tool views SHALL use the supplied illustrations for the stopped, Chat, Skill, and MCP states. While a chat job is queued, retrieving, generating, or retrying, the interface SHALL cycle through the four supplied thinking frames at one-second intervals without replacing the job's accessible status text.
+
+#### Scenario: Rescue paths have distinct illustrations
+
+- **WHEN** the landing or rescue-tool view is rendered
+- **THEN** the corresponding stopped, Chat, Skill, and MCP illustration is present with meaningful alternative text
+
+#### Scenario: Thinking frames continue until completion
+
+- **WHEN** a chat job remains active
+- **THEN** the visual advances to the next thinking frame every second and stops when the job completes or fails
+
 ### Requirement: Conversation handoff after three turns
 
 The maximum user turns in one chat SHALL be configurable and SHALL default to three. Once reached, the next typed question SHALL be transferred into the landing view's «سؤال شما» field for confirmation as a fresh rescue flow rather than extending the old model context.

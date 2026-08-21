@@ -1,10 +1,10 @@
 # Liara Docs Rescue Skill
 
-Version: `0.2.0`
+Version: `0.3.0`
 
-This Skill teaches a coding agent to retrieve Liara documentation before answering, preserve citations and relevant images, abstain without evidence, and give the user a verification step.
+This Skill gives a coding agent Liara's official source map, documentation information architecture, MDX schema, route-selection rules, and an evidence-first troubleshooting workflow. It preserves citations and relevant images, abstains without evidence, and ends with a verification step.
 
-It is useless on its own. The Skill is the *workflow*; the evidence comes from the Liara Docs Rescue MCP server, and an agent with the Skill but no MCP connection has been told to retrieve from something that is not there. Connect the MCP server first.
+The MCP server is the preferred retrieval path because it searches the indexed corpus and returns structured evidence. The downloadable `SKILL.md` is nevertheless self-contained: when MCP is unavailable, it directs the agent to the official documentation and source repository and explains how to extract the MDX safely. In either mode, the agent must not answer technical claims from memory.
 
 ## 1. Connect the MCP server
 

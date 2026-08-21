@@ -141,6 +141,10 @@ Use the MCP management screen in Agent settings, or add a streamable server to
 
 The web UI presents these six hosts as separate expandable cards because the
 configuration location and transport wording differ even though the endpoint
+is shared. Each card uses a locally served official host mark so the guide remains
+recognizable without depending on a third-party image request at runtime. Logo
+sources are the official Cursor brand kit, the installed Codex application, and
+the official Claude, Open WebUI, Jan, and AnythingLLM projects.
 is identical.
 
 ### MCP Inspector

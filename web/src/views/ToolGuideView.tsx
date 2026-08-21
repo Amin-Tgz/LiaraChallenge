@@ -6,7 +6,7 @@ const MCP_URL = 'https://liara-rescue-api.liara.run/mcp'
 type HostGuide = {
   id: string
   name: string
-  mark: string
+  logo: string
   summary: string
   steps: string[]
   config?: string
@@ -17,7 +17,7 @@ const MCP_HOSTS: HostGuide[] = [
   {
     id: 'claude',
     name: 'Claude Code',
-    mark: 'C',
+    logo: '/brand/claude-code.ico',
     summary: 'نصب با CLI یا فایل پروژهٔ .mcp.json',
     steps: [
       'ترمینال را در پروژه باز کنید.',
@@ -30,7 +30,7 @@ const MCP_HOSTS: HostGuide[] = [
   {
     id: 'cursor',
     name: 'Cursor',
-    mark: '⌁',
+    logo: '/brand/cursor.svg',
     summary: 'Settings → Tools & MCP یا فایل .cursor/mcp.json',
     steps: [
       'در Cursor وارد Settings و سپس Tools & MCP شوید.',
@@ -43,7 +43,7 @@ const MCP_HOSTS: HostGuide[] = [
   {
     id: 'codex',
     name: 'Codex',
-    mark: '◫',
+    logo: '/brand/codex.png',
     summary: 'Settings → MCP servers یا ~/.codex/config.toml',
     steps: [
       'در برنامهٔ Codex از Settings وارد MCP servers شوید و سرور جدید بسازید.',
@@ -56,7 +56,7 @@ const MCP_HOSTS: HostGuide[] = [
   {
     id: 'openwebui',
     name: 'Open WebUI',
-    mark: 'O',
+    logo: '/brand/open-webui.png',
     summary: 'Admin Settings → Integrations → Add Connection',
     steps: [
       'از نسخهٔ 0.6.31 یا جدیدتر و با حساب مدیر وارد Admin Settings شوید.',
@@ -69,7 +69,7 @@ const MCP_HOSTS: HostGuide[] = [
   {
     id: 'jan',
     name: 'Jan',
-    mark: 'J',
+    logo: '/brand/jan.svg',
     summary: 'Settings → MCP Servers → Add MCP Server',
     steps: [
       'در Jan وارد Settings و سپس MCP Servers شوید.',
@@ -82,7 +82,7 @@ const MCP_HOSTS: HostGuide[] = [
   {
     id: 'anythingllm',
     name: 'AnythingLLM',
-    mark: 'A',
+    logo: '/brand/anythingllm.png',
     summary: 'مدیریت MCP در UI یا anythingllm_mcp_servers.json',
     steps: [
       'در تنظیمات Agent، بخش MCP Servers را باز کنید و سرور جدید اضافه کنید.',
@@ -141,8 +141,9 @@ function SkillGuide() {
           <span className="eyebrow">فایل نصب‌شدنی</span>
           <h1>افزودن Skill لیارا به دستیار کدنویسی</h1>
           <p className="lead">
-            این فایل به دستیار سازگار یاد می‌دهد پرسش‌های لیارا را با جست‌وجوی مستندات،
-            citation و پرهیز از حدس پاسخ دهد. خود Skill پاسخ آماده یا کلید محرمانه ندارد.
+            این فایل نقشهٔ مستندات رسمی، ساختار MDX و روش استخراج و استناد را به دستیار
+            سازگار می‌دهد تا پاسخ‌های لیارا را کامل و دقیق و بدون حدس تولید کند. هیچ کلید
+            محرمانه‌ای داخل Skill نیست.
           </p>
         </div>
         <a className="button-link download-button" href="/skill/SKILL.md" download>
@@ -196,7 +197,7 @@ function McpGuide() {
           {MCP_HOSTS.map((host) => (
             <details className="host-card" key={host.id}>
               <summary>
-                <BrandMark mark={host.mark} id={host.id} />
+                <BrandMark logo={host.logo} name={host.name} id={host.id} />
                 <span><strong>{host.name}</strong><small>{host.summary}</small></span>
                 <span className="expand-mark" aria-hidden="true">+</span>
               </summary>
@@ -221,6 +222,10 @@ function McpGuide() {
   )
 }
 
-function BrandMark({ mark, id }: { mark: string; id: string }) {
-  return <span className={'host-logo host-logo-' + id} aria-hidden="true">{mark}</span>
+function BrandMark({ logo, name, id }: { logo: string; name: string; id: string }) {
+  return (
+    <span className={'host-logo host-logo-' + id} aria-hidden="true">
+      <img src={logo} alt="" data-host-logo={name} loading="lazy" decoding="async" />
+    </span>
+  )
 }

@@ -59,6 +59,18 @@ export default function LandingView() {
             <li><CheckIcon /> پرهیز از پاسخ بدون شاهد</li>
             <li><CheckIcon /> حفظ پرسش در تمام مسیر</li>
           </ul>
+          <figure className="hero-visual">
+            <img
+              src="/images/stopped.png"
+              alt="آهویی که در برف متوقف شده است"
+              data-testid="stopped-illustration"
+              decoding="async"
+            />
+            <figcaption>
+              <strong>مثل آهو توی برف گیر کردی؟</strong>
+              <span>سؤالت را بنویس؛ راه خروج را از دل مستندات پیدا می‌کنیم.</span>
+            </figcaption>
+          </figure>
         </div>
 
         <form onSubmit={submit} className="question-card">

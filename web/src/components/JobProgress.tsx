@@ -7,7 +7,15 @@
  * looks like a normal answer.
  */
 
+import { useEffect, useState } from 'react'
 import type { JobStatus } from '../api/types'
+
+const THINKING_FRAMES = [
+  '/images/think1.png',
+  '/images/think2.png',
+  '/images/think3.png',
+  '/images/think4.png',
+]
 
 const LABELS: Record<JobStatus, string> = {
   queued: 'سؤال شما ثبت شد و در نوبت پاسخ‌گویی است.',
@@ -34,7 +42,11 @@ export function JobProgress({
   errorMessage,
 }: Props) {
   const failed = status === 'failed'
-  const busy = status === 'queued' || status === 'retrieving' || status === 'generating'
+  const busy =
+    status === 'queued' ||
+    status === 'retrieving' ||
+    status === 'generating' ||
+    status === 'retrying'
 
   return (
     <div
@@ -43,8 +55,8 @@ export function JobProgress({
       aria-live="polite"
       aria-busy={busy}
     >
+      {busy && <ThinkingFrames />}
       <p className="job-label">
-        {busy && <span className="spinner" aria-hidden="true" />}
         {LABELS[status]}
       </p>
 
@@ -61,6 +73,28 @@ export function JobProgress({
           {errorCode && <code className="error-code"> ({errorCode})</code>}
         </p>
       )}
+    </div>
+  )
+}
+
+function ThinkingFrames() {
+  const [frame, setFrame] = useState(0)
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setFrame((current) => (current + 1) % THINKING_FRAMES.length)
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  return (
+    <div className="thinking-visual" aria-hidden="true">
+      <img
+        src={THINKING_FRAMES[frame]}
+        alt=""
+        data-testid="thinking-frame"
+        decoding="async"
+      />
     </div>
   )
 }

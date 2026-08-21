@@ -36,3 +36,7 @@ secrets/
 
 # Playwright MCP session artifacts
 .playwright-mcp/
+.playwright-cli/
+
+output/
+.uv-cache/

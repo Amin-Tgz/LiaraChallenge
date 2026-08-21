@@ -25,8 +25,13 @@ The system SHALL generate candidate question/answer pairs from indexed documents
 
 #### Scenario: Generation capacity is configurable
 
-- **WHEN** the configured FAQ count and output-token budget are increased
-- **THEN** both values are sent to the generator without imposing a minimum answer length on questions that only need a short answer
+- **WHEN** the configured FAQ count and output-token budget are changed
+- **THEN** both values are sent to the generator, while answer depth is determined by the available evidence rather than a fixed brevity target
+
+#### Scenario: Generated answers are complete and precise
+
+- **WHEN** a document supports prerequisites, ordered steps, variants, limitations, warnings, or a verification method relevant to a generated question
+- **THEN** the answer includes those supported details completely and precisely without inventing facts, padding the answer, or prioritizing candidate count over quality
 
 #### Scenario: Forced full regeneration is atomic per document
 

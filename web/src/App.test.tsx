@@ -129,6 +129,10 @@ test('the rescue tools view keeps the original question', () => {
   expect(screen.getByText('چرا استقرار من شکست می‌خورد؟')).toBeDefined()
   expect(screen.getByRole('heading', { name: 'گفت‌وگو با دستیار' })).toBeDefined()
   expect(screen.getByRole('heading', { name: /دستیار کدنویسی/ })).toBeDefined()
+  expect(document.querySelectorAll('[data-tool-visual]')).toHaveLength(3)
+  expect(document.querySelector('[data-tool-visual="chat"]')?.getAttribute('src')).toBe('/images/chat.png')
+  expect(document.querySelector('[data-tool-visual="skill"]')?.getAttribute('src')).toBe('/images/skill.png')
+  expect(document.querySelector('[data-tool-visual="mcp"]')?.getAttribute('src')).toBe('/images/MCP.png')
 })
 
 test('a failed job states its cause rather than a generic message', () => {
@@ -151,8 +155,20 @@ test('every job state is described in plain language', () => {
     const region = screen.getByRole('status')
     expect(region.textContent?.trim().length ?? 0).toBeGreaterThan(10)
     expect(region.getAttribute('aria-live')).toBe('polite')
+    expect(screen.getByTestId('thinking-frame').getAttribute('src')).toBe('/images/think1.png')
     unmount()
   }
+})
+
+test('the landing hero uses the stopped illustration', () => {
+  render(
+    <MemoryRouter>
+      <LandingView />
+    </MemoryRouter>,
+  )
+
+  expect(screen.getByTestId('stopped-illustration').getAttribute('src')).toBe('/images/stopped.png')
+  expect(screen.getByText('مثل آهو توی برف گیر کردی؟')).toBeDefined()
 })
 
 test('code blocks render left-to-right with a copy control', () => {
@@ -351,6 +367,7 @@ test('the MCP guide provides a selectable card for each supported host', async (
 
   for (const host of ['Claude Code', 'Cursor', 'Codex', 'Open WebUI', 'Jan', 'AnythingLLM']) {
     expect(screen.getByText(host)).toBeDefined()
+    expect(document.querySelector('[data-host-logo="' + host + '"]')).not.toBeNull()
   }
   await user.click(screen.getByText('Claude Code'))
   expect(screen.getByText(/claude mcp add --transport http/)).toBeDefined()

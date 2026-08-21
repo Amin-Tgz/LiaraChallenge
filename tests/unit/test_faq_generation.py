@@ -62,6 +62,8 @@ def test_gateway_requests_strict_schema_with_low_reasoning_effort() -> None:
 
     assert result == '{"faqs": []}'
     assert captured["reasoning_effort"] == "low"
+    assert "کامل و دقیق" in captured["messages"][0]["content"]
+    assert "پاسخ کوتاه" not in captured["messages"][0]["content"]
     assert captured["response_format"]["type"] == "json_schema"
     assert captured["response_format"]["json_schema"]["strict"] is True
 

@@ -184,44 +184,51 @@ index. None blocks the demo; each degrades answer quality in a way that is invis
 inside the system, because every one of them still produces a confident, well-formed,
 correctly-cited answer.
 
-- [ ] 19.1 Deduplicate near-identical chunks in retrieval results; verify a query that
+- [x] 19.1 Deduplicate near-identical chunks in retrieval results; verify a query that
       currently returns the same passage three times returns it once and fills the freed
       budget with distinct evidence. Observed: `deploy-app` returned 3× at 0.6165, and
       `add-domain` 4× — up to half of `top_k` spent on one passage.
-- [ ] 19.2 Reconcile `page_title` and `section_title` between `search` and `get_document`;
+- [x] 19.2 Reconcile `page_title` and `section_title` between `search` and `get_document`;
       verify the same chunk reports identical citation fields through both tools. Observed:
       the two strings swap roles between the tools, so the Skill's "preserve the exact
       retrieved page title" has no single exact value to preserve.
-- [ ] 19.3 Fix the MDX title extraction that yields `page_title: "mirror لیارا"` for
+- [x] 19.3 Fix the MDX title extraction that yields `page_title: "mirror لیارا"` for
       `/paas/nextjs/how-tos/deploy-app`; verify no active chunk carries a title absent from
       its source document. A corrupted title is reproduced verbatim in a user-facing citation.
-- [ ] 19.4 Surface truncation explicitly on retrieval results; verify a chunk cut mid-sentence
+- [x] 19.4 Surface truncation explicitly on retrieval results; verify a chunk cut mid-sentence
       is flagged so a caller knows to fetch the full section. Observed: the highest-scoring
       passage for the SSL question was severed exactly before its most actionable clause.
-- [ ] 19.5 Evaluate whether `diagnose` should retrieve differently from `search` rather than
+- [x] 19.5 Evaluate whether `diagnose` should retrieve differently from `search` rather than
       wrapping it; verify a troubleshooting question returns prerequisite and fix content
       ahead of definitional content. Observed: `diagnose` on the SSL failure returned mostly
       "what SSL is" and none of the three passages that actually resolved it.
 
 ## 20. User-reported rescue-flow quality pass
 
-- [ ] 20.1 Add a configurable stronger threshold for short FAQ queries and deduplicate
+- [x] 20.1 Add a configurable stronger threshold for short FAQ queries and deduplicate
       normalized FAQ questions; verify `سلام` returns no Celery result and equivalent FAQ
       questions occupy one result slot.
-- [ ] 20.2 Increase FAQ candidates per document from 5 to 15, add a configurable structured
-      output-token budget, and add forced per-document atomic regeneration; verify existing
-      entries survive a failed replacement and a successful replacement deactivates them.
-- [ ] 20.3 Redesign the Persian RTL UI using the adopted blue/gold 8pt system, responsive
+- [x] 20.2 Raise the FAQ generation capacity from 5 to 15, add a configurable structured
+      output-token budget, require complete and precise evidence-sized answers, and add forced
+      per-document atomic regeneration; verify existing entries survive a failed replacement
+      and a successful replacement deactivates them.
+- [x] 20.3 Redesign the Persian RTL UI using the adopted blue/gold 8pt system, responsive
       surfaces, complete interaction states, and a persisted light/dark toggle; verify WCAG
       contrast, keyboard focus, mobile layout, console, and network state with Playwright.
-- [ ] 20.4 Submit both question textareas with Enter and preserve multiline entry with
+- [x] 20.4 Submit both question textareas with Enter and preserve multiline entry with
       Shift+Enter and IME composition; verify each keyboard path.
-- [ ] 20.5 Rename the Skill path, expose the canonical Skill as a real downloadable Markdown
+- [x] 20.5 Rename the Skill path, expose the canonical Skill as a real downloadable Markdown
       attachment, and verify the documented URL does not return SPA HTML.
-- [ ] 20.6 Replace the generic MCP instructions with branded, expandable host guides for
+- [x] 20.6 Replace the generic MCP instructions with branded, expandable host guides for
       Claude Code, Cursor, Codex, Open WebUI, Jan, and AnythingLLM, grounded in current
       official documentation.
-- [ ] 20.7 Add a persistent top-left home control on non-home routes and preserve the current
+- [x] 20.7 Add a persistent top-left home control on non-home routes and preserve the current
       question while navigating backward through the rescue flow.
-- [ ] 20.8 Cap chat at three configurable user turns in both API and UI; verify a next question
+- [x] 20.8 Cap chat at three configurable user turns in both API and UI; verify a next question
       creates no old-conversation job and arrives prefilled in the landing question field.
+- [x] 20.9 Place the supplied stopped, Chat, Skill, and MCP illustrations in their rescue-flow
+      contexts and cycle the four supplied thinking frames once per second while chat work is
+      active; verify production image requests, desktop/mobile layout, and console state.
+- [x] 20.10 Expand the downloadable Skill with official source links, the Liara documentation
+      information architecture, MDX page schema, route-selection and evidence extraction
+      guidance; replace temporary MCP host marks with locally served official logos.

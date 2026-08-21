@@ -331,6 +331,8 @@ LLM_API_KEY=<from-liara-secrets>
 LLM_MODEL=gemini-3.7-flash
 
 # --- Bulk FAQ generation: separate var so it can diverge from chat ---
+# Item/token values are ceilings. The prompt requires complete, precise,
+# evidence-sized answers and forbids padding or fabrication to fill either one.
 FAQ_LLM_MODEL=gemini-3.7-flash
 FAQ_REASONING_EFFORT=low       # reasoning bills as output; keep bulk extraction cheap
 FAQ_ITEMS_PER_DOCUMENT=15

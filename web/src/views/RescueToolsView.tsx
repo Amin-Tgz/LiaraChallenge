@@ -24,6 +24,8 @@ type Tool = {
   title: string
   description: string
   action: string
+  image: string
+  imageAlt: string
 }
 
 const TOOLS: Tool[] = [
@@ -33,6 +35,8 @@ const TOOLS: Tool[] = [
     description:
       'همین‌جا سؤالتان را می‌پرسید و پاسخی می‌گیرید که هر ادعای فنی‌اش به مستندات لیارا ارجاع دارد. اگر شواهد کافی نباشد، حدس نمی‌زند و همین را می‌گوید.',
     action: 'شروع گفت‌وگو',
+    image: '/images/chat.png',
+    imageAlt: 'راه نجات گفت‌وگو با دستیار مستندات',
   },
   {
     name: 'skill',
@@ -40,6 +44,8 @@ const TOOLS: Tool[] = [
     description:
       'فایل Skill را دانلود و در دستیار سازگار نصب کنید تا هنگام پرسش دربارهٔ لیارا، روش جست‌وجوی مستند و قواعد استناد را در اختیار داشته باشد.',
     action: 'دانلود و راهنمای نصب',
+    image: '/images/skill.png',
+    imageAlt: 'راه نجات با نصب Skill لیارا',
   },
   {
     name: 'mcp',
@@ -47,6 +53,8 @@ const TOOLS: Tool[] = [
     description:
       'یک سرور MCP که جست‌وجو در مستندات، خواندن یک صفحه و عیب‌یابی را به‌صورت ابزار در اختیار هر میزبان سازگار می‌گذارد.',
     action: 'راهنمای اتصال',
+    image: '/images/MCP.png',
+    imageAlt: 'راه نجات با اتصال سرور MCP',
   },
 ]
 
@@ -116,9 +124,15 @@ export default function RescueToolsView() {
       <ul className="tools">
         {TOOLS.map((tool) => (
           <li key={tool.name}>
-            <span className={'tool-icon tool-icon-' + tool.name} aria-hidden="true">
-              {tool.name === 'chat' ? 'گ' : tool.name === 'skill' ? 'S' : 'M'}
-            </span>
+            <div className="tool-visual">
+              <img
+                src={tool.image}
+                alt={tool.imageAlt}
+                data-tool-visual={tool.name}
+                loading="lazy"
+                decoding="async"
+              />
+            </div>
             <h2>{tool.title}</h2>
             <p>{tool.description}</p>
             <button

@@ -228,7 +228,8 @@ complete list. The ones most worth understanding:
 | `RETRIEVAL_SIMILARITY_THRESHOLD` | `0.25` | Below this, results are suppressed and the gap is recorded. |
 | `FAQ_SIMILARITY_THRESHOLD` | `0.4` | Admin-editable at runtime. |
 | `FAQ_SHORT_QUERY_SIMILARITY_THRESHOLD` | `0.6` | Greetings and other tiny queries must clear a stronger relevance bar. |
-| `FAQ_ITEMS_PER_DOCUMENT` | `15` | Expanded generated coverage; short answers remain short. |
+| `FAQ_ITEMS_PER_DOCUMENT` | `15` | Upper bound for useful candidates; every accepted answer must be complete, precise, and sized to its evidence. |
+| `FAQ_MAX_OUTPUT_TOKENS` | `12288` | Generation headroom, not a target length; answers must not be padded or fabricated. |
 | `RETRIEVAL_DUPLICATE_THRESHOLD` | `0.9` | Near-identical passages consume one evidence slot. |
 | `AGENT_TOKEN_BUDGET` | `32000` | Must hold one retrieval round (`RETRIEVAL_TOP_K` × `CHUNK_MAX_TOKENS` ≈ 9.6k) plus the answer. At the previous 8000, every well-retrieved question terminated as `AGENT_LIMIT_REACHED` before it could answer. |
 | `AGENT_MAX_TOOL_CALLS` | `3` | Enforced in code, not requested in the prompt. |
