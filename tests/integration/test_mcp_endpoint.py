@@ -15,7 +15,9 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import httpx
+import pytest
 
+from src.core.errors import ErrorCode, RescueError
 from src.main import MCP_PREFIX, create_app
 
 PROTOCOL_VERSION = "2025-06-18"
@@ -156,3 +158,49 @@ async def test_a_host_missing_the_event_stream_accept_header_is_refused_clearly(
     # and the 406 is what a misconfigured host will actually see.
     assert response.status_code == 406
     assert "text/event-stream" in response.text
+
+
+async def test_the_mcp_surface_is_rate_limited_like_the_http_api(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A caller refused at /api/v1 must not route around it through a tool.
+
+    Two things are asserted, and neither is "the limiter counts correctly" —
+    that is `test_rate_limit.py`'s job against a real Redis. What matters *here*
+    is that the MCP tool path calls the guard at all, and that a refusal reaches
+    the host as the Persian user message rather than the operator detail. The
+    second half is a regression test: the guard originally ran outside the
+    error-conversion block, and `RATE_LIMITED: ip rate limit of 30 requests per
+    minute exceeded` went to the user.
+
+    Driving the real limiter to its ceiling from here would mean thirty-odd live
+    embedding calls, and — the fixed window being one minute — would flake the
+    moment those calls straddled a boundary.
+    """
+
+    async def _always_limited(**_: object) -> None:
+        raise RescueError(
+            ErrorCode.RATE_LIMITED,
+            detail="ip rate limit of 30 requests per minute exceeded",
+            context={"rate_limit_scope": "ip", "retry_after": 42},
+        )
+
+    monkeypatch.setattr("src.mcp.server.enforce_rate_limit", _always_limited)
+
+    async with mcp_client() as client:
+        response = await _post(
+            client,
+            _rpc(
+                "tools/call",
+                {"name": "search", "arguments": {"query": "لیارا"}},
+                request_id=9,
+            ),
+        )
+
+    assert response.status_code == 200, response.text
+    rendered = json.dumps(_payload(response), ensure_ascii=False)
+    assert "RATE_LIMITED" in rendered
+    # The Persian message a host shows a person...
+    assert "تعداد درخواست‌ها زیاد است" in rendered
+    # ...and never the operator detail, which names internal thresholds.
+    assert "requests per minute exceeded" not in rendered

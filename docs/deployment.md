@@ -288,11 +288,26 @@ HNSW index present. On `https://liara-rescue-api.liara.run`, `/health/live`
 returns 200 and `/health/ready` reports Postgres, Redis, and the gateway
 healthy. The 300-user load test remains a deployment gate.
 
-> **Liara's edge strips the readiness body.** `/health/ready` returns 503 with a
-> **zero-length body** at the public URL even though the application emits the
-> full per-dependency JSON — the logs show the response it produced. Diagnose a
-> failing readiness check from `liara logs`, never from the public response
-> body, which carries the status code and nothing else.
+Ingestion then ran against the managed database through the deployed gateway,
+producing **3,776 chunks across 1,142 documents** at upstream commit `dbb7430`,
+index version `a60589fd`, all validation checks passing. `/health/ready` now
+returns **200** with Postgres, Redis, the active index, and the gateway all
+healthy — task 2.6 closed.
+
+The MCP server is live at `https://liara-rescue-api.liara.run/mcp`, verified from
+Claude Code and Codex. See [`mcp.md`](mcp.md).
+
+> **Liara's edge strips the readiness body when the check fails.** While
+> `/health/ready` was 503 it returned a **zero-length body** at the public URL,
+> even though the application emitted the full per-dependency JSON — the logs
+> show the response it produced. Diagnose a failing readiness check from
+> `liara logs`, never from the public response body, which in that state carries
+> the status code and nothing else.
+
+> **FAQ entries do not yet exist in production.** FAQ generation (task 8.6) ran
+> against the local database only, so the FAQ fast path and the MCP
+> `related_questions` field are both empty against the deployed index. Documentation
+> retrieval is unaffected. Run FAQ generation against Liara before the demo.
 
 > **Account hygiene.** This account already hosts `royara-api`, `royara-db`, and `makeupapp`, which are unrelated to this project. Every name above is prefixed `liara-rescue-` so nothing collides, and no existing resource is touched.
 

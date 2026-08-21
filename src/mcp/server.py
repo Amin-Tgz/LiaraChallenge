@@ -109,11 +109,15 @@ async def _call_documentation_tool(
     The registry validates arguments against the same strict schema the chat
     agent uses, so an invalid field is rejected identically on both surfaces.
     """
-    await _guard_rate_limit(ctx)
     settings = get_settings()
     session_factory = get_sessionmaker()
     embeddings = EmbeddingClient(settings)
     try:
+        # Inside the conversion block on purpose. Raised outside it, a
+        # RescueError reaches the host as `str(exception)` — which is the
+        # operator detail, not the Persian user message, and RULES.md §4
+        # forbids surfacing operator detail to a user.
+        await _guard_rate_limit(ctx)
         async with session_factory() as session:
             registry = build_documentation_tool_registry(session, embeddings, settings=settings)
             return await registry.execute(tool.value, arguments)

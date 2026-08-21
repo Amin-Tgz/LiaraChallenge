@@ -2,7 +2,7 @@
 name: liara-docs-rescue
 description: Diagnose and answer questions about Liara services, deployments, runtimes, panel settings, CLI commands, and documentation gaps using the Liara Docs Rescue MCP evidence. Use when a user is stuck with Liara; do not use for unrelated cloud platforms.
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
 ---
 
 # Liara Docs Rescue
@@ -23,7 +23,7 @@ Resolve Liara questions from retrieved public documentation, never from memory a
 6. Compose an actionable answer from that evidence only.
 7. End with a concrete verification step that lets the user confirm the fix.
 
-If the Liara retrieval MCP is not connected, stop before giving technical instructions. State that documentation evidence could not be retrieved and consult [README.md](README.md) for setup; do not silently substitute memory or an unrelated web result.
+If the Liara retrieval MCP is not connected, stop before giving technical instructions. State that documentation evidence could not be retrieved and consult [README.md](README.md) for setup — the server is at `https://liara-rescue-api.liara.run/mcp` over Streamable HTTP and needs no credential. Do not silently substitute memory or an unrelated web result.
 
 ## Evidence and failure rules
 

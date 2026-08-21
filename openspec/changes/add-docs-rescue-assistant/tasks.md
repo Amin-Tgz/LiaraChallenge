@@ -1,6 +1,12 @@
 ## 1. Pre-flight verification
 
 - [ ] 1.1 Rotate the AvalAI API key exposed during planning and verify the old key returns 401
+  - **Blocked on rotation, not on verification.** Checked 2026-08-21: the exposed key
+    still authenticates — `scripts/verify_providers.py` reports HTTP 200 from
+    `api.avalai.ir`, so it remains live and usable by anyone holding it. The operator
+    was informed and chose to defer. Once rotated, this task passes by running
+    `uv run python -m scripts.verify_providers --expect-unauthorized OLD_AVALAI_KEY`
+    with the old value in that environment variable; it passes only on a 401.
 - [x] 1.2 Create Postgres via `liara db:create` per docs/deployment.md §4; verify it appears in `liara db:list` with status OK
 - [x] 1.3 **Manual step — the CLI cannot do this.** Enable Pgvector in the Liara panel before any data exists, accept the restart, then verify `SELECT extversion FROM pg_extension WHERE extname='vector'` returns a version
 - [x] 1.4 Check `pg_trgm` availability via `pg_available_extensions` and record the result in design.md Open Questions
@@ -16,7 +22,7 @@
 - [x] 2.3 Mount the built frontend as static files from the API with an SPA catch-all, API routes under `/api/v1`; verify the root path serves the SPA and `/api/v1/*` does not collide
 - [x] 2.4 Add `.env.example` and confirm `.env` is gitignored; verify no secret appears in `git ls-files`
 - [x] 2.5 Implement `/health/live` and a `/health/ready` returning per-dependency status; verify the response shape matches docs/deployment.md §10
-- [ ] 2.6 **Deploy to Liara and verify `/health/ready` is reachable over HTTPS with Postgres and Redis both reporting healthy**
+- [x] 2.6 **Deploy to Liara and verify `/health/ready` is reachable over HTTPS with Postgres and Redis both reporting healthy**
 
 ## 3. Data model
 
@@ -103,8 +109,21 @@
 ## 12. Skill
 
 - [x] 12.1 Author the Skill encoding the workflow from the agent-integrations spec; verify it instructs retrieval before answering and abstention without evidence
-- [ ] 12.2 Add installation instructions, a version identifier, and a worked example; verify the example runs against the deployed service
+- [x] 12.2 Add installation instructions, a version identifier, and a worked example; verify the example runs against the deployed service
 - [ ] 12.3 **Verify the Skill end to end inside at least one real coding agent**
+  - Partially verified 2026-08-21. The MCP server connects from two real hosts —
+    `claude mcp list` reports `liara-docs-rescue … ✔ Connected`, and Codex resolved all
+    three tool schemas by name and argument. Driven through Codex, the Skill also held
+    its failure discipline under a real agent: with the tool calls blocked, it refused to
+    answer from memory and stated that retrieval had not run rather than reporting a
+    documentation gap.
+  - **What remains:** one agent completing the full retrieve → cite → answer loop. Codex
+    cannot: its MCP tool calls need approval, and both non-interactive policies fail —
+    `never` refuses outright, `on-request` blocks on a prompt nothing can answer. The
+    server is registered for this project in Claude Code, but MCP servers load at session
+    start, so the session that added it does not have the tools. **A fresh Claude Code
+    session has them; ask the SSL question from README §3 and confirm the answer carries
+    `docs.liara.ir` citations.**
 
 ## 13. Admin console and dashboard
 
@@ -117,7 +136,7 @@
 
 ## 14. Platform operations
 
-- [ ] 14.1 Implement rate limiting by IP and session in Redis; verify exceeding the limit returns the rate-limited code
+- [x] 14.1 Implement rate limiting by IP and session in Redis; verify exceeding the limit returns the rate-limited code
 - [x] 14.2 Enforce maximum question length and history depth; verify oversized input is rejected with a message stating the limit
 - [ ] 14.3 Implement secret redaction in logging; verify no key, cookie, or token appears in emitted logs
 - [x] 14.4 Verify no provider credential is present in the delivered frontend bundle
@@ -129,10 +148,10 @@
 
 ## 15. MCP server
 
-- [ ] 15.1 Implement the MCP server in the API process exposing search, get-document, and diagnose tools with strict schemas; verify tool discovery lists complete schemas
-- [ ] 15.2 Return citations and image metadata from tool results drawn from the shared retrieval core; verify sources match those the web chat returns for the same question
-- [ ] 15.3 Implement timeouts, rate limiting, and comprehensible errors; verify schema-invalid input names the offending field
-- [ ] 15.4 Provide host configuration examples; verify against a real host or MCP inspector
+- [x] 15.1 Implement the MCP server in the API process exposing search, get-document, and diagnose tools with strict schemas; verify tool discovery lists complete schemas
+- [x] 15.2 Return citations and image metadata from tool results drawn from the shared retrieval core; verify sources match those the web chat returns for the same question
+- [x] 15.3 Implement timeouts, rate limiting, and comprehensible errors; verify schema-invalid input names the offending field
+- [x] 15.4 Provide host configuration examples; verify against a real host or MCP inspector
 
 ## 16. Evaluation
 

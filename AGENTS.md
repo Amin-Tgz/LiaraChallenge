@@ -16,6 +16,7 @@ These are the source of truth. Code follows them; when code and spec disagree, *
 | [`docs/deployment.md`](docs/deployment.md) | Infrastructure, models, pricing, config, MDX pre-pass, error taxonomy, deploy sequence | Any question about *how* it runs, is configured, or is deployed |
 | `openspec/changes/**` | Active change proposals, designs, delta specs, task lists | Before starting any task — the task's acceptance criteria live here |
 | `openspec/specs/**` | Current capability specs (post-archive) | To understand existing behavior |
+| [`docs/mcp.md`](docs/mcp.md) | MCP endpoint, tools, host configuration, error codes | Connecting a coding agent, or changing the MCP surface |
 
 **Precedence when documents conflict:**
 
