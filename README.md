@@ -288,6 +288,10 @@ config. `.liaraignore` keeps `.env`, `secrets/`, and local state out of the
 deploy bundle; Liara does **not** read your local `.env`, so every production
 value must be set explicitly on the app.
 
+Deploy the API before the Worker. The production API entrypoint runs
+`alembic upgrade head` before Uvicorn starts and exits on migration failure;
+the Worker deliberately does not run migrations, avoiding an Alembic race.
+
 ```bash
 liara deploy --app liara-rescue-api --team-id <team> \
   --path . --dockerfile docker/Dockerfile.prod --port 8000

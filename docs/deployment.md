@@ -477,13 +477,13 @@ web/               React/Vite source; build output served by the API
 
 **Adopted from the reference:**
 
-- **Alembic for every schema change.** No hand-written DDL, no `create_all` in application code. `alembic/env.py` reads the database URL from settings so dev and production share one migration path. Deployments apply migrations as a controlled step.
+- **Alembic for every schema change.** No hand-written DDL, no `create_all` in application code. `alembic/env.py` reads the database URL from settings so dev and production share one migration path. In production, the API entrypoint applies migrations before Uvicorn starts; a migration failure exits the new container before it can receive traffic. The Worker does not migrate.
 
   Which database a run targets is selected explicitly, never implicitly:
 
   | Command | Targets | Used by |
   |---|---|---|
-  | `alembic upgrade head` | `DATABASE_URL` | Local compose (run inside the container, where `postgres` resolves) and the deployed container, where it is the private-network address |
+  | `alembic upgrade head` | `DATABASE_URL` | Local compose (run inside the container, where `postgres` resolves) and the production API entrypoint, where it is the private-network address |
   | `alembic -x target=liara upgrade head` | `LIARA_DATABASE_URL` | An operator machine migrating the managed database over its external connection URL |
 
   There is no implicit fallback from one to the other. A migration that silently
@@ -592,7 +592,7 @@ day 1    ingestion → embeddings → retrieval → chat → queue/worker → FA
 day 2    UI → Skill → admin → dashboard → Portkey/Opik → guardrails → MCP → demo
 ```
 
-Each deploy: build immutable versioned image → run migrations → deploy → poll `/health/ready` → roll back on failure.
+Each deploy: build immutable versioned image → deploy API (entrypoint runs migrations before Uvicorn) → poll `/health/ready` → deploy Worker → verify its health check → roll back the application image on failure. Database revisions remain backward-compatible with the previous image because an image rollback does not automatically downgrade the schema.
 
 ### Deploying the three application services
 
@@ -610,6 +610,11 @@ liara deploy --team-id "$LIARA_TEAM_ID" --path docker/gateway
 `docker/entrypoint.sh` dispatches on. Two images would be two things to keep in
 step, and the first time they drifted the symptom would be a worker running
 older retrieval code against a newer index — invisible except as worse answers.
+
+**API owns migrations.** Its entrypoint runs `alembic upgrade head` before
+Uvicorn and exits immediately if Alembic fails, so the incompatible release
+never accepts traffic. Deploy API before Worker. The Worker deliberately skips
+migrations, preventing concurrent containers from racing the same revision.
 
 `entrypoint.sh --check` is the container health probe and is role-aware: HTTP
 `/health/live` for the API, and PID-1 identity for the Worker, which listens on

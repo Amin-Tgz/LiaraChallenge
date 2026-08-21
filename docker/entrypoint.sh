@@ -32,6 +32,13 @@ fi
 
 case "${APP_ROLE:-api}" in
   api)
+    # Schema compatibility is a prerequisite for accepting traffic.  Liara
+    # withholds the new release while this process is unhealthy, so a failed
+    # migration fails the deployment and leaves the previous healthy release
+    # serving.  Only the API owns this step: deploying API before Worker avoids
+    # two containers racing the same Alembic revision.
+    echo "applying database migrations before API startup"
+    alembic upgrade head
     exec uvicorn src.main:app --host 0.0.0.0 --port "${PORT:-8000}"
     ;;
   worker)

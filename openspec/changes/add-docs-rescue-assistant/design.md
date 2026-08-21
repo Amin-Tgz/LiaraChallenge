@@ -108,7 +108,7 @@ Keeping `docker compose up` sufficient to run everything locally is what keeps t
 
 ### Alembic owns every schema change
 
-Migrations are generated and applied through Alembic, with `alembic/env.py` reading the database URL from settings so both environments share one migration path. No `create_all` in application code, no hand-written DDL. Deployment applies migrations as an explicit controlled step rather than on application startup, so a failed migration is a failed deploy rather than a half-migrated running service.
+Migrations are generated and applied through Alembic, with `alembic/env.py` reading the database URL from settings so both environments share one migration path. No `create_all` in application code, no hand-written DDL. In production, the API entrypoint applies `alembic upgrade head` before starting Uvicorn. A failed migration therefore exits the new container before it can accept traffic and fails the deploy while Liara retains the previous healthy release. The Worker never runs migrations; releases deploy API first and Worker second so there is one migration owner and no concurrent Alembic race.
 
 Broader backend layout — adopted selectively from the FastAPI Starter Kit reference, and what was deliberately left out — is in `docs/deployment.md` §6b.
 
@@ -143,7 +143,7 @@ No migration — greenfield. Deployment sequence:
 3. Apply schema migrations.
 4. Run ingestion; confirm an active index version exists and readiness turns positive.
 5. Generate the FAQ set; review in the admin console.
-6. Deploy subsequent releases only after CI passes, verifying readiness after each and rolling back on failure.
+6. Deploy subsequent releases only after CI passes: deploy API first so its entrypoint migrates before accepting traffic, verify readiness, then deploy Worker and verify its health check. Roll back the application image on failure; schema revisions must remain backward-compatible with the previous image because an application rollback does not automatically downgrade the database.
 
 Rollback: redeploy the prior image. Index rollback is independent — reactivating a prior index version does not require redeployment, and a failed ingestion never disturbs the active index.
 
