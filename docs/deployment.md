@@ -281,16 +281,18 @@ created on private network `liara-challenge`; the three monitoring disks above
 were also created. A read-only production SQL check on 2026-08-21 confirmed
 `vector` 0.8.1 and `pg_trgm` 1.6 are installed. The pinned gateway, Prometheus, Grafana,
 Loki, and Alloy releases have each passed their public HTTPS health endpoint.
-The API and worker have not been released because their Liara environment does
-not yet have the complete database, Redis, provider, and admin secret set.
-Migrations, ingestion, application readiness, and the 300-user load test remain
-deployment gates. A same-day CLI check showed all seven `liara-rescue-*` apps
-as `ACTIVE` and both managed databases as `OK`; those control-plane states do
-not replace the pending public API readiness check. The API's deployed HTTPS
-base URL is `https://liara-rescue-api.liara.run`; on 2026-08-21,
-`GET /health/ready` returned HTTP 503, so task 2.6 remains open. By contrast,
-the local Compose endpoint at `http://localhost:8000/health/ready` returned 200
-with Postgres, Redis, the active index, and the gateway all healthy.
+**Released 2026-08-21.** The gateway, API, and worker now each have a healthy
+release. `alembic -x target=liara upgrade head` brought the managed database to
+`dbd77a4b7a1e` with all eleven tables, `vector` 0.8.1, `pg_trgm` 1.6, and the
+HNSW index present. On `https://liara-rescue-api.liara.run`, `/health/live`
+returns 200 and `/health/ready` reports Postgres, Redis, and the gateway
+healthy. The 300-user load test remains a deployment gate.
+
+> **Liara's edge strips the readiness body.** `/health/ready` returns 503 with a
+> **zero-length body** at the public URL even though the application emits the
+> full per-dependency JSON — the logs show the response it produced. Diagnose a
+> failing readiness check from `liara logs`, never from the public response
+> body, which carries the status code and nothing else.
 
 > **Account hygiene.** This account already hosts `royara-api`, `royara-db`, and `makeupapp`, which are unrelated to this project. Every name above is prefixed `liara-rescue-` so nothing collides, and no existing resource is touched.
 
@@ -555,6 +557,46 @@ day 2    UI → Skill → admin → dashboard → Portkey/Opik → guardrails �
 ```
 
 Each deploy: build immutable versioned image → run migrations → deploy → poll `/health/ready` → roll back on failure.
+
+### Deploying the three application services
+
+Each service names its own Liara config, so a deploy is one command with no
+flags to remember and nothing to get wrong at 3am:
+
+```bash
+liara deploy --team-id "$LIARA_TEAM_ID" --liara-json liara.api.json   --dockerfile docker/Dockerfile.prod
+liara deploy --team-id "$LIARA_TEAM_ID" --liara-json liara.worker.json   --dockerfile docker/Dockerfile.prod
+liara deploy --team-id "$LIARA_TEAM_ID" --path docker/gateway
+```
+
+**One image, two roles.** The API and the Worker deploy the *same* image from
+`docker/Dockerfile.prod` and differ only in `APP_ROLE` (`api` | `worker`), which
+`docker/entrypoint.sh` dispatches on. Two images would be two things to keep in
+step, and the first time they drifted the symptom would be a worker running
+older retrieval code against a newer index — invisible except as worse answers.
+
+`entrypoint.sh --check` is the container health probe and is role-aware: HTTP
+`/health/live` for the API, and PID-1 identity for the Worker, which listens on
+no port. Liara still requires a `port` for a worker app; nothing serves it.
+
+**Liara health-check bounds.** `healthCheck.startPeriod` must be **≤ 3000 ms**.
+A larger value is rejected at upload with `CODE 400` before anything builds.
+
+### Two failure modes that cost a deploy each
+
+Both were configuration, and both crashed the container at import time with a
+message that named the real cause — which is the only reason they took minutes
+rather than hours. Neither is a code defect; both are worth knowing.
+
+| Symptom | Cause |
+|---|---|
+| `METRICS_PATH must be an absolute non-root path`, value `C:/Program Files/Git/metrics` | `liara env:set` run from **Git Bash**. MSYS path conversion rewrites any argument that looks like a Unix absolute path into a Windows one *before* the CLI sees it. `DOCS_CACHE_DIR=/app/.cache/docs` was mangled the same way. |
+| Deploy reports the container unhealthy, logs show the previous release's traceback | Liara serves the last release's logs while no healthy release exists. Fix the cause and redeploy; do not read the stale trace as the new failure. |
+
+**Set any variable whose value begins with `/` from PowerShell, or prefix the
+command with `MSYS_NO_PATHCONV=1`.** Verify afterwards with `liara env:list` —
+the mangling is silent, and the first sign of it is a container that will not
+boot.
 
 **Index safety.** Never mutate the active index in place. Write a new `index_version`, validate it with smoke queries, then flip activation atomically. Retain the previous healthy version. A failed reindex must leave the running index untouched.
 

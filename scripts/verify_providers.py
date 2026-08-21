@@ -19,6 +19,7 @@ Usage::
     uv run python -m scripts.verify_providers                    # configured keys
     uv run python -m scripts.verify_providers --expect-unauthorized OLD_KEY_VAR
     uv run python -m scripts.verify_providers --json
+    uv run python -m scripts.verify_providers         --gateway-base-url https://liara-rescue-gateway.liara.run
 """
 
 from __future__ import annotations
@@ -35,10 +36,18 @@ import httpx
 from src.core.config import Settings, get_settings
 from src.services.embeddings import CUSTOM_HOST_HEADER, PROVIDER_HEADER, PROVIDER_PROTOCOL
 
-#: A credential check must not be mistaken for a load test. One token out is
-#: enough to prove the key is accepted and the model is routable.
-_PROBE_MAX_TOKENS = 1
-_PROBE_TIMEOUT_SECONDS = 30.0
+#: A credential check must not be mistaken for a load test — but it must not be
+#: so small that the model cannot finish. At `max_tokens=1` the fallback
+#: provider answers 400 "output limit was reached", which reads exactly like an
+#: unreachable provider and sent an earlier run of this script chasing egress
+#: rules that were never the problem. Small enough to stay cheap, large enough
+#: that a healthy provider succeeds.
+_PROBE_MAX_TOKENS = 16
+#: Generous on purpose. The fallback model is a reasoning model and bills its
+#: thinking as output, so even a 16-token reply can take most of a minute. A
+#: tight timeout here would report "unreachable" for a provider that is merely
+#: slow — the same conflation RULES.md §1 forbids in user-facing errors.
+_PROBE_TIMEOUT_SECONDS = 120.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,7 +171,17 @@ async def run_probes(
     *,
     old_key_var: str | None,
     skip_gateway: bool,
+    gateway_base_url: str | None = None,
 ) -> list[ProbeResult]:
+    """Probe every configured provider, directly and through the gateway.
+
+    `gateway_base_url` overrides `PORTKEY_BASE_URL` so the probe can be aimed at
+    the *deployed* gateway from an operator machine. The upstream request then
+    originates inside Liara rather than on a laptop, which is what task 1.6
+    actually asks about — a laptop and a container do not share egress rules,
+    and a local success proves nothing about production.
+    """
+    gateway = gateway_base_url or settings.portkey_base_url
     results: list[ProbeResult] = []
     async with httpx.AsyncClient(timeout=_PROBE_TIMEOUT_SECONDS) as client:
         # Direct, gateway bypassed: separates "the provider rejects us" from
@@ -184,7 +203,7 @@ async def run_probes(
                 await _probe(
                     client,
                     name="primary-via-gateway",
-                    endpoint=settings.portkey_base_url,
+                    endpoint=gateway,
                     upstream=settings.llm_base_url,
                     api_key=settings.llm_api_key,
                     model=settings.llm_model,
@@ -218,7 +237,7 @@ async def run_probes(
                     await _probe(
                         client,
                         name="fallback-via-gateway",
-                        endpoint=settings.portkey_base_url,
+                        endpoint=gateway,
                         upstream=settings.portkey_fallback_base_url,
                         api_key=settings.portkey_fallback_api_key,
                         model=settings.portkey_fallback_model,
@@ -285,6 +304,16 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Probe providers directly only, when no gateway container is reachable.",
     )
+    parser.add_argument(
+        "--gateway-base-url",
+        metavar="URL",
+        default=None,
+        help=(
+            "Aim the gateway probes at this URL instead of PORTKEY_BASE_URL. "
+            "Point it at the deployed gateway to make the upstream request "
+            "originate inside Liara (OpenSpec task 1.6)."
+        ),
+    )
     parser.add_argument("--json", action="store_true", help="Emit machine-readable results.")
     args = parser.parse_args(argv)
 
@@ -294,6 +323,7 @@ def main(argv: list[str] | None = None) -> int:
             settings,
             old_key_var=args.expect_unauthorized,
             skip_gateway=args.skip_gateway,
+            gateway_base_url=args.gateway_base_url,
         )
     )
 

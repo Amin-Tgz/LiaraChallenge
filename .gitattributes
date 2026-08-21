@@ -1,0 +1,7 @@
+# Shell scripts run inside Linux containers. A CRLF checkout on Windows makes
+# `#!/bin/sh` unparseable and the container dies at start with "no such file or
+# directory" — naming a file that plainly exists. Force LF regardless of the
+# committer's core.autocrlf.
+*.sh text eol=lf
+docker/entrypoint.sh text eol=lf
+Dockerfile* text eol=lf

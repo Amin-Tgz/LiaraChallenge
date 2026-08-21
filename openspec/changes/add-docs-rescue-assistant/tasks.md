@@ -5,7 +5,7 @@
 - [x] 1.3 **Manual step — the CLI cannot do this.** Enable Pgvector in the Liara panel before any data exists, accept the restart, then verify `SELECT extversion FROM pg_extension WHERE extname='vector'` returns a version
 - [x] 1.4 Check `pg_trgm` availability via `pg_available_extensions` and record the result in design.md Open Questions
 - [x] 1.5 Create Redis and the `liara-rescue-api`, `-worker`, and `-gateway` app services per docs/deployment.md §4; verify each appears in `liara app:list` and shares a private network with the database
-- [ ] 1.6 Confirm the fallback provider is reachable **from a deployed container** (not a local machine) and record the working base URL
+- [x] 1.6 Confirm the fallback provider is reachable **from a deployed container** (not a local machine) and record the working base URL
 
 ## 2. Walking skeleton deployed (hour one)
 

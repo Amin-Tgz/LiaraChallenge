@@ -26,6 +26,11 @@ playwright-report/
 test-results/
 graphify-out/
 
+# Docs checkout kept between ingestion runs (DOCS_CACHE_DIR). It is a clone of
+# an upstream repository, so committing it would nest one git repo inside
+# another and ship a corpus the pipeline re-fetches anyway.
+.cache/
+
 # Locally generated operational credentials
 secrets/
 

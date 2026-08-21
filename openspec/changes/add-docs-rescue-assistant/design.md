@@ -150,5 +150,12 @@ Rollback: redeploy the prior image. Index rollback is independent — reactivati
 ## Open Questions
 
 - ~~Whether `pg_trgm` is available on Liara's managed Postgres.~~ **Answered 2026-08-21:** a read-only query through the external Liara connection confirmed `pg_trgm` is available and installed at version 1.6. The same check confirmed `vector` is installed at version 0.8.1. Fuzzy Persian lexical matching may therefore use `pg_trgm`; `tsvector` remains the baseline retrieval path.
-- Which secondary provider to configure for fallback. The gateway makes this configuration; the requirement is only that one exists and is reachable from the deployment network.
+- ~~Which secondary provider to configure for fallback. The gateway makes this configuration; the requirement is only that one exists and is reachable from the deployment network.~~ **Answered 2026-08-21:** the fallback is Tapsage at `https://api.tapsage.com/openai/v1` running `gpt-5.6-luna`, verified reachable **through the deployed gateway container** — the upstream request originates on Liara, not on a laptop. `scripts/verify_providers.py --gateway-base-url https://liara-rescue-gateway.liara.run` reports 200 for all four probes.
+
+  Two things this verification cost, both worth recording because each looked exactly like an unreachable provider:
+
+  1. At `max_tokens=1` the provider returns 400 *“output limit was reached”*. The probe, not the provider, was wrong.
+  2. It is **slow** — 43–47 s for a 16-token reply, because the model bills its reasoning as output. Anything probing it on a 30 s timeout reports a timeout for a provider that is merely thinking.
+
+  That latency is a live constraint, not a curiosity: `AGENT_TIMEOUT_SECONDS` is 60 s, so a fallback turn has roughly 13 s of headroom before the bound that exists to cap cost starts cutting off answers the fallback would have produced. Measure a real fallback turn before the demo (task 18.2) and raise the bound for the fallback path if it does not fit.
 - ~~Final chunk count and the resulting HNSW build parameters — measurable only after the first full ingestion run.~~ **Answered.** The first full run at upstream commit `dbb7430` produced **3,776 chunks** across 1,143 documents (11 sections; `tv` contains no `.mdx`), token range 120–1,149, 376 images. Default HNSW parameters (`m=16`, `ef_construction=64`) are adequate: at this size the planner actually prefers a sequential scan, and a forced index scan is no faster — 13.3 ms against 14.4 ms median for top-8 similarity. The index earns its place as the corpus grows, not today. Revisit only if chunk count grows by an order of magnitude.

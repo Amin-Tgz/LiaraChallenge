@@ -1,0 +1,12 @@
+{
+  "app": "liara-rescue-api",
+  "platform": "docker",
+  "port": 8000,
+  "healthCheck": {
+    "command": ["curl", "-fsS", "http://127.0.0.1:8000/health/live"],
+    "interval": 10000,
+    "timeout": 3000,
+    "retries": 10,
+    "startPeriod": 3000
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "app": "liara-rescue-worker",
+  "platform": "docker",
+  "port": 8000,
+  "healthCheck": {
+    "command": ["/usr/local/bin/entrypoint.sh", "--check"],
+    "interval": 10000,
+    "timeout": 3000,
+    "retries": 10,
+    "startPeriod": 3000
+  }
+}
