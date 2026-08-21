@@ -133,7 +133,11 @@ def test_a_non_postgres_url_is_rejected() -> None:
 # DATABASE_URL it is optional, because not every checkout migrates production.
 
 
-def test_liara_database_url_is_optional() -> None:
+def test_liara_database_url_is_optional(monkeypatch: pytest.MonkeyPatch) -> None:
+    # `_env_file=None` skips the dotenv file but not the process environment,
+    # and the containers set LIARA_DATABASE_URL for real. Clearing it is what
+    # makes this a test of the default rather than of the machine it runs on.
+    monkeypatch.delenv("LIARA_DATABASE_URL", raising=False)
     assert _settings().liara_database_url == ""
 
 

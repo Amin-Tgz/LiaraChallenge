@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.api.deps import rate_limited
 from src.db.session import get_session
 from src.services.embeddings import EmbeddingClient
 from src.services.faq import FaqEmbeddingProvider, match_faqs
@@ -51,6 +52,7 @@ async def search_faq(
     payload: FaqSearchRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
     embeddings: Annotated[FaqEmbeddingProvider, Depends(get_faq_embeddings)],
+    _: Annotated[object, Depends(rate_limited)] = None,
 ) -> FaqSearchResponse:
     matches = await match_faqs(session, payload.question, embeddings)
     return FaqSearchResponse(

@@ -23,6 +23,7 @@ dependencies = [
     "prometheus-client==0.26.0",
     "opentelemetry-sdk==1.44.0",
     "opentelemetry-exporter-otlp-proto-http==1.44.0",
+    "mcp==1.12.4",
 ]
 
 [dependency-groups]
@@ -48,6 +49,11 @@ select = ["E", "F", "I", "UP", "B", "C4", "SIM"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["src", "tests"]
+# `src = ["src", ...]` makes ruff resolve top-level names against that
+# directory, so our own `src/mcp` package makes it read the third-party MCP
+# SDK as first-party and sort it into the wrong group. The layout is fixed by
+# docs/deployment.md §6b; naming the SDK here is the smaller correction.
+known-third-party = ["mcp"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

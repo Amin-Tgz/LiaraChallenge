@@ -15,6 +15,7 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.routing import Route
 
 from src.api.health import router as health_router
 from src.api.v1.routes import api_router
@@ -27,11 +28,17 @@ from src.core.logging import (
     set_correlation,
     shutdown_telemetry_logging,
 )
+from src.mcp.server import build_mcp_asgi_app, build_mcp_server
 from src.services.metrics import PrometheusMiddleware, prometheus_response
 
 logger = get_logger(__name__)
 
 API_PREFIX = "/api/v1"
+
+#: Where MCP hosts connect. Kept out of `/api/v1` on purpose: the MCP protocol
+#: carries its own versioning, and pinning it to this project's REST version
+#: would force a protocol move every time an unrelated endpoint changed shape.
+MCP_PREFIX = "/mcp"
 
 #: Paths the SPA catch-all must never answer for.
 _RESERVED_PREFIXES = (
@@ -49,7 +56,17 @@ _RESERVED_PREFIXES = (
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("api starting", extra={"app_env": get_settings().app_env})
-    yield
+    # Starlette does not run the lifespan of a mounted sub-application, so the
+    # MCP session manager has to be entered here. Without this the endpoint
+    # mounts and accepts connections, then fails on the first tool call — a
+    # failure that looks like a broken tool rather than a server that never
+    # started.
+    mcp = getattr(app.state, "mcp_server", None)
+    if mcp is None:
+        yield
+        return
+    async with mcp.session_manager.run():
+        yield
     from src.db.session import dispose_engine
     from src.services.redis_client import close_redis
 
@@ -108,6 +125,19 @@ def create_app() -> FastAPI:
 
     app.include_router(health_router)
     app.include_router(api_router, prefix=API_PREFIX)
+
+    mcp = build_mcp_server()
+    app.state.mcp_server = mcp
+    mcp_asgi = build_mcp_asgi_app(mcp)
+    # Both spellings, deliberately. Starlette's `Mount` only matches a path with
+    # something after it, so a mount alone serves `/mcp/` and lets bare `/mcp`
+    # fall through to the SPA catch-all — which, being GET-only, answers a host's
+    # POST with 405. Hosts are configured with the bare path far more often than
+    # the trailing-slash one, so the exact route is registered too, before the
+    # catch-all exists to shadow it.
+    app.router.routes.append(Route(MCP_PREFIX, endpoint=mcp_asgi))
+    app.mount(MCP_PREFIX, mcp_asgi)
+
     _mount_web(app, Path(settings.web_dist_dir))
     return app
 

@@ -24,6 +24,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.api.deps import rate_limited
 from src.core.config import Settings, get_settings
 from src.core.errors import ErrorCode, RescueError, spec_for
 from src.core.logging import get_logger
@@ -225,6 +226,7 @@ async def start_conversation(
     request: Request,
     response: Response,
     db: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[object, Depends(rate_limited)] = None,
 ) -> AskResponse:
     """Open a rescue attempt from the landing question."""
     settings = get_settings()
@@ -251,6 +253,7 @@ async def continue_conversation(
     request: Request,
     response: Response,
     db: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[object, Depends(rate_limited)] = None,
 ) -> AskResponse:
     """Ask a follow-up inside an existing conversation."""
     settings = get_settings()
