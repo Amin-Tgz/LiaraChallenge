@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import field_validator
+from pydantic import ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -152,22 +152,39 @@ class Settings(BaseSettings):
     otel_exporter_otlp_logs_endpoint: str = ""
     otel_service_name: str = "liara-rescue-api"
 
-    @field_validator("database_url")
+    # --- Liara operator helpers ---
+    # External connection URLs, used only by CLI verification and by migrations
+    # targeting the managed database from a laptop. The deployed containers
+    # reach the same services over the private network via DATABASE_URL and
+    # REDIS_URL, so nothing at runtime reads these.
+    liara_database_url: str = ""
+    liara_redis_url: str = ""
+    #: Every `liara` CLI call against this project must carry the team id, or
+    #: it resolves against the personal account and 404s as if the app did not
+    #: exist. See docs/deployment.md §4.
+    liara_team_id: str = ""
+
+    @field_validator("database_url", "liara_database_url")
     @classmethod
-    def _async_postgres_driver(cls, v: str) -> str:
+    def _async_postgres_driver(cls, v: str, info: ValidationInfo) -> str:
         # Liara's panel emits `postgresql://…`, but `create_async_engine` refuses
         # any scheme without an async driver — so a verbatim paste takes the API
         # and the worker down at boot. Normalize the paste; reject a driver the
         # operator chose deliberately, since rewriting that would hide intent.
+        name = (info.field_name or "database_url").upper()
+        # Only the operator helper is optional — an unset LIARA_DATABASE_URL
+        # simply means migrations are not being pointed at the managed database.
+        if not v and info.field_name == "liara_database_url":
+            return v
         scheme, separator, remainder = v.partition("://")
         if not separator:
-            raise ValueError("DATABASE_URL must be a URL of the form <scheme>://<host>/<database>")
+            raise ValueError(f"{name} must be a URL of the form <scheme>://<host>/<database>")
         if scheme in {"postgres", "postgresql"}:
             return f"postgresql+asyncpg://{remainder}"
         if scheme == "postgresql+asyncpg":
             return v
         raise ValueError(
-            f"DATABASE_URL scheme {scheme!r} is not supported; "
+            f"{name} scheme {scheme!r} is not supported; "
             "use postgresql+asyncpg (or plain postgresql, which is normalized)"
         )
 

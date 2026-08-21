@@ -22,7 +22,33 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+
+
+def _database_url() -> str:
+    """Choose which database this migration run targets.
+
+    `alembic -x target=liara upgrade head` points the identical migration path at
+    the managed Liara database from an operator machine, using the external
+    connection URL. Without the flag the run targets `DATABASE_URL` — the local
+    compose database in development, and the private-network address inside a
+    deployed container. Selecting the target explicitly is deliberate: an
+    implicit fallback to production is exactly the accident worth preventing.
+    """
+    settings = get_settings()
+    target = context.get_x_argument(as_dictionary=True).get("target", "default")
+    if target == "default":
+        return settings.database_url
+    if target == "liara":
+        if not settings.liara_database_url:
+            raise RuntimeError(
+                "alembic -x target=liara needs LIARA_DATABASE_URL set to the "
+                "external connection URL from the Liara panel"
+            )
+        return settings.liara_database_url
+    raise RuntimeError(f"unknown alembic target {target!r}; expected 'default' or 'liara'")
+
+
+config.set_main_option("sqlalchemy.url", _database_url())
 
 
 def _include_object(obj, name, type_, reflected, compare_to) -> bool:  # type: ignore[no-untyped-def]

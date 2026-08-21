@@ -12,7 +12,7 @@
 - [x] 2.1 Scaffold the FastAPI project per the layout in docs/deployment.md §6b with uv, `pyproject.toml`, `.python-version`, and a committed `uv.lock`; verify `uv sync --frozen` succeeds from a clean checkout
 - [x] 2.2 Scaffold the React/TypeScript/Vite frontend; verify `npm run build` produces a bundle
 - [x] 2.2b Write `docker-compose.yml` bringing up Postgres, Redis, API, Worker, and the Portkey gateway locally; verify `docker compose up` starts the full stack on Docker Desktop and `/health/ready` responds
-- [ ] 2.2c Initialize Alembic with `env.py` reading the database URL from settings; verify `alembic upgrade head` runs against both the local compose database and Liara
+- [x] 2.2c Initialize Alembic with `env.py` reading the database URL from settings; verify `alembic upgrade head` runs against both the local compose database and Liara
 - [x] 2.3 Mount the built frontend as static files from the API with an SPA catch-all, API routes under `/api/v1`; verify the root path serves the SPA and `/api/v1/*` does not collide
 - [x] 2.4 Add `.env.example` and confirm `.env` is gitignored; verify no secret appears in `git ls-files`
 - [x] 2.5 Implement `/health/live` and a `/health/ready` returning per-dependency status; verify the response shape matches docs/deployment.md §10

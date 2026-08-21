@@ -123,3 +123,27 @@ def test_a_non_async_driver_is_rejected_rather_than_silently_rewritten() -> None
 def test_a_non_postgres_url_is_rejected() -> None:
     with pytest.raises(ValueError, match="DATABASE_URL"):
         _settings(database_url="mysql://root:pw@liaradb:3306/postgres")
+
+
+# --- LIARA_DATABASE_URL ----------------------------------------------------
+#
+# The operator helper carries the *external* connection URL, used only by
+# `alembic -x target=liara` and by CLI verification. It shares the normalizer
+# with DATABASE_URL — a panel paste is a panel paste either way — but unlike
+# DATABASE_URL it is optional, because not every checkout migrates production.
+
+
+def test_liara_database_url_is_optional() -> None:
+    assert _settings().liara_database_url == ""
+
+
+def test_liara_database_url_is_normalized_to_asyncpg() -> None:
+    settings = _settings(liara_database_url="postgresql://root:pw@liaradb:5432/postgres")
+    assert settings.liara_database_url == "postgresql+asyncpg://root:pw@liaradb:5432/postgres"
+
+
+def test_liara_database_url_rejects_a_non_postgres_url_naming_its_own_field() -> None:
+    # The message must name LIARA_DATABASE_URL, not DATABASE_URL; pointing an
+    # operator at the wrong variable during a deploy is its own outage.
+    with pytest.raises(ValueError, match="LIARA_DATABASE_URL"):
+        _settings(liara_database_url="mysql://root:pw@liaradb:3306/postgres")

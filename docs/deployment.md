@@ -440,6 +440,16 @@ web/               React/Vite source; build output served by the API
 **Adopted from the reference:**
 
 - **Alembic for every schema change.** No hand-written DDL, no `create_all` in application code. `alembic/env.py` reads the database URL from settings so dev and production share one migration path. Deployments apply migrations as a controlled step.
+
+  Which database a run targets is selected explicitly, never implicitly:
+
+  | Command | Targets | Used by |
+  |---|---|---|
+  | `alembic upgrade head` | `DATABASE_URL` | Local compose (run inside the container, where `postgres` resolves) and the deployed container, where it is the private-network address |
+  | `alembic -x target=liara upgrade head` | `LIARA_DATABASE_URL` | An operator machine migrating the managed database over its external connection URL |
+
+  There is no implicit fallback from one to the other. A migration that silently
+  reached production because a variable was unset is the accident this prevents.
 - **Async SQLAlchemy 2.x with asyncpg** — matches FastAPI's concurrency model and matters here because retrieval and provider calls both block on I/O.
 - **`pydantic-settings` for typed configuration** loaded from environment, with `.env` used only locally.
 - **Central route registration** in one `routes.py` rather than scattered decorators.
