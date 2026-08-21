@@ -716,6 +716,22 @@ identically shows a healthy 0% failure rate for a system that has been down
 since deploy. Cost is reported only over events that actually carry one, so an
 unpriced model is never presented as free.
 
+### Verified against production, 2026-08-21
+
+Unauthenticated `GET /api/v1/admin/dashboard` returns 401 with a Persian body
+and nothing else. Authenticated, it returned the no-data contract working
+exactly as intended on a system with real data but no user traffic yet:
+
+- `faq_resolution_rate`, `rescue_tool_split`, `unresolved_questions`,
+  `unresolved_pages`, `failures_by_code`, `provider_fallbacks` — all
+  `no_data: true`, `value: null`. Nobody has used the product yet, and the
+  dashboard says so instead of reporting a flattering zero.
+- `active_index` — `a60589fd`, commit `dbb7430`, 1,143 documents, 3,776 chunks.
+- `faq_corpus` — 4,066 entries, all active, 0 awaiting re-embedding.
+- `token_usage` — 1,417,916 tokens from the ingestion run, while `cost_usd` is
+  `no_data`, because embeddings were recorded without a unit price. **This is
+  the intended behavior**: an unpriced model reports absence rather than $0.00.
+
 > **Alembic autogenerate will try to drop the HNSW indexes.** It cannot read a
 > pgvector index — it sees no opclass it recognizes on either side and concludes
 > the index is surplus. Applying that silently degrades every similarity query
