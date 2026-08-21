@@ -34,14 +34,29 @@ source section has one. Attach those citations to the claims they support.
 
 ### Failures name their own cause
 
-The tools never return an empty success to mean "something went wrong". Two
-codes in particular must not be collapsed into one message:
+The tools never return an empty success to mean "something went wrong". Three
+of these look alike from the outside and must never be collapsed into one
+message — only the second is about the documentation:
 
 | Code | What it means | What to tell the user |
 |---|---|---|
 | `NO_ACTIVE_INDEX` | The service is not ready. Ingestion never ran or activation failed. | An operational failure. Do **not** present it as "no documentation found". |
 | `NO_RESULTS_ABOVE_THRESHOLD` | The index is healthy and simply has no relevant evidence. | A genuine documentation gap. Say so; do not answer from memory. |
+| `NO_RESULTS_FOR_FILTER` | A `service`/`runtime`/`framework` value the corpus does not use removed every candidate. | Retry without the filter. **Not** a documentation gap. |
 | `RATE_LIMITED` | The per-IP request budget for this minute is spent. | Wait and retry; the error carries `retry_after`. |
+
+### Filters are hard filters
+
+`service`, `runtime`, and `framework` **remove** results rather than reordering
+them. Pass one only when the user stated it; metadata boosting already favours
+the right pages without a filter.
+
+The index stores `runtime` as `nodejs`, `python`, `php`, `go`, `docker`,
+`dotnet`, or `static` — taken from the documentation's own directory names.
+Common aliases (`node`, `node.js`, `js`, `ts`, `py`, `golang`, `.net`, `c#`)
+are normalized. Anything else raises `NO_RESULTS_FOR_FILTER` naming the values
+that do exist, rather than reporting an empty result that reads as a
+documentation gap.
 
 ---
 

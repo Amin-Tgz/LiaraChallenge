@@ -20,6 +20,7 @@ from typing import Any
 class ErrorCode(StrEnum):
     NO_ACTIVE_INDEX = "NO_ACTIVE_INDEX"
     NO_RESULTS_ABOVE_THRESHOLD = "NO_RESULTS_ABOVE_THRESHOLD"
+    NO_RESULTS_FOR_FILTER = "NO_RESULTS_FOR_FILTER"
     INDEX_STALE = "INDEX_STALE"
     RETRIEVAL_FAILED = "RETRIEVAL_FAILED"
     EMBEDDING_FAILED = "EMBEDDING_FAILED"
@@ -71,6 +72,22 @@ ERROR_SPECS: dict[ErrorCode, ErrorSpec] = {
             "می‌توانید سؤال را با عبارت دیگری بپرسید یا از ابزارهای نجات استفاده کنید."
         ),
         operator_action="Genuine documentation gap — log to unresolved analytics.",
+        transient=False,
+    ),
+    ErrorCode.NO_RESULTS_FOR_FILTER: ErrorSpec(
+        code=ErrorCode.NO_RESULTS_FOR_FILTER,
+        http_status=404,
+        message_fa=(
+            "برای فیلتری که مشخص شد هیچ مستندی وجود ندارد. "
+            "این به معنای نبود پاسخ در مستندات نیست؛ "
+            "مقدار فیلتر با مستندات ایندکس‌شده مطابقت ندارد. "
+            "لطفاً بدون فیلتر یا با مقدار درست دوباره جست‌وجو کنید."
+        ),
+        operator_action=(
+            "A caller filtered on a metadata value the corpus does not use — check the "
+            "detail for the offending field and the values actually present. Not a "
+            "documentation gap, and it must never be reported as one."
+        ),
         transient=False,
     ),
     ErrorCode.INDEX_STALE: ErrorSpec(

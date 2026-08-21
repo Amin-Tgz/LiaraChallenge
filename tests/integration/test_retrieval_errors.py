@@ -98,3 +98,67 @@ async def test_healthy_empty_search_has_distinct_code_and_records_gap(
     assert event.error_code == ErrorCode.NO_RESULTS_ABOVE_THRESHOLD.value
     assert event.payload["similarity_threshold"] == pytest.approx(0.25)
     assert event.payload["top_similarity"] == pytest.approx(0.2)
+
+
+async def test_a_filter_the_corpus_never_uses_is_not_reported_as_a_docs_gap(
+    migrated: AsyncConnection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The fourth outcome, found by driving the Skill through a real agent.
+
+    A hard filter on a value the index does not store removes every candidate.
+    Reported as NO_RESULTS_ABOVE_THRESHOLD it reads as "the documentation has no
+    answer" — which sent an agent to a confident, wrong abstention over
+    documentation that plainly existed.
+    """
+
+    async def nothing(*args, **kwargs):  # type: ignore[no-untyped-def]
+        return []
+
+    monkeypatch.setattr(retrieval, "hybrid_retrieve", nothing)
+    question = f"filter-{uuid.uuid4()}"
+
+    with pytest.raises(RescueError) as caught:
+        await retrieval.search_documentation(
+            migrated,
+            question,
+            UnusedEmbeddings(),
+            intent=retrieval.RetrievalIntent(explicit_filters={"runtime": "haskell"}),
+            telemetry=RetrievalTelemetry(trace_id="trace-filter"),
+        )
+
+    assert caught.value.code is ErrorCode.NO_RESULTS_FOR_FILTER
+    assert caught.value.code is not ErrorCode.NO_RESULTS_ABOVE_THRESHOLD
+    # The operator detail must name the offending field and what the corpus
+    # does hold, or the next person debugging this learns nothing.
+    assert "runtime='haskell'" in (caught.value.detail or "")
+    assert caught.value.context["filter_field"] == "runtime"
+    assert "nodejs" in caught.value.context["filter_values_present"]
+
+
+async def test_the_documented_runtime_alias_no_longer_empties_the_result_set(
+    migrated: AsyncConnection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`runtime="node"` is what a caller types; `nodejs` is what the index holds."""
+    seen: dict[str, str] = {}
+
+    async def capture(*args, **kwargs):  # type: ignore[no-untyped-def]
+        intent = kwargs.get("intent")
+        if intent is not None:
+            seen.update(intent.explicit_filters)
+        return []
+
+    monkeypatch.setattr(retrieval, "hybrid_retrieve", capture)
+
+    with pytest.raises(RescueError):
+        await retrieval.search_documentation(
+            migrated,
+            f"alias-{uuid.uuid4()}",
+            UnusedEmbeddings(),
+            intent=retrieval.RetrievalIntent(explicit_filters={"runtime": "node"}),
+            telemetry=RetrievalTelemetry(trace_id="trace-alias"),
+        )
+
+    # Retrieval saw the corpus's own token, so the filter can actually match.
+    assert seen["runtime"] == "nodejs"

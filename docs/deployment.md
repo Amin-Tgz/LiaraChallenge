@@ -649,6 +649,7 @@ Every failure carries a stable machine code, a Persian user-facing message that 
 |---|---|---|---|
 | `NO_ACTIVE_INDEX` | Ingestion never ran, or activation failed | «هنوز هیچ مستندی ایندکس نشده است. این یک خطای سیستمی است، نه نبود پاسخ.» | Run ingestion; check the last `index_versions` row |
 | `NO_RESULTS_ABOVE_THRESHOLD` | Index healthy, nothing scored above threshold | «مستندات ایندکس شده‌اند، اما پاسخی مرتبط با این سؤال پیدا نشد.» | Genuine gap — log to unresolved analytics |
+| `NO_RESULTS_FOR_FILTER` | An explicit metadata filter names a value the corpus does not use, removing every candidate | «برای فیلتری که مشخص شد هیچ مستندی وجود ندارد. این به معنای نبود پاسخ در مستندات نیست؛ مقدار فیلتر با مستندات ایندکس‌شده مطابقت ندارد.» | Read `filter_field` and `filter_values_present` in the log. Not a documentation gap — never report it as one |
 | `INDEX_STALE` | Active index older than N days, or docs SHA moved | Answer served + freshness note | Trigger reindex |
 | `RETRIEVAL_FAILED` | pgvector query error / DB unreachable | «مشکلی در جست‌وجوی مستندات پیش آمد. لطفاً دوباره تلاش کنید.» | Check Postgres |
 | `EMBEDDING_FAILED` | Embedding call failed | same, with retry | Check AvalAI + gateway |
@@ -662,6 +663,12 @@ Every failure carries a stable machine code, a Persian user-facing message that 
 | `FAQ_OUTPUT_INVALID` | One generated FAQ entry failed structured validation | «خروجی تولید پرسش‌های مرتبط ساختار معتبر نداشت و ذخیره نشد. سایر پرسش‌های معتبر پردازش شدند.» | Inspect recorded validation errors and source document |
 
 `NO_ACTIVE_INDEX` (system broken) and `NO_RESULTS_ABOVE_THRESHOLD` (working correctly, real docs gap) must **never** share a message. One is an outage; the other is your product's most valuable data.
+
+`NO_RESULTS_FOR_FILTER` was added after a third way of looking empty was found in the wild. Driving the Skill through a real coding agent, `runtime="node"` returned nothing — the corpus stores `nodejs`, derived from the documentation's own directory names, and a hard filter on a value it never uses removes every candidate. Reported as `NO_RESULTS_ABOVE_THRESHOLD`, the agent correctly followed the rule and confidently told the user the documentation had no answer. It did have the answer.
+
+Two defenses now: `_RUNTIME_ALIASES` in `src/services/retrieval.py` normalizes the names callers actually type (`node`, `golang`, `.net`, `ts`), and anything still unmatched raises `NO_RESULTS_FOR_FILTER` naming the field and the values the index does hold. The check runs only when a search comes back empty, so the common path pays nothing for it.
+
+**The lesson generalizes.** A hard filter is the one place in retrieval where being slightly wrong *removes* evidence rather than reordering it. Every future filter needs the same question asked of it: when this matches nothing, can the caller tell that apart from a documentation gap?
 
 Codes appear in the API response, structured logs, and dashboard failure counts — the same string everywhere, so grepping a log and filtering the dashboard use identical vocabulary.
 

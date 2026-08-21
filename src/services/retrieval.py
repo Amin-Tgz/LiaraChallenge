@@ -13,6 +13,7 @@ import time
 import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
+from types import MappingProxyType
 from typing import Any, Protocol
 
 from sqlalchemy import Select, func, select
@@ -29,6 +30,41 @@ from src.db.models.enums import UsageEventType
 logger = get_logger(__name__)
 
 _METADATA_FIELDS = frozenset({"service", "runtime", "framework"})
+
+#: Names callers use for a runtime, mapped to the token the corpus actually
+#: stores. The index derives `runtime` from the documentation's own directory
+#: names — `nodejs`, not `node` — so a caller saying the obvious thing filtered
+#: every row away and got back "no relevant documentation found". A hard filter
+#: is the one place in retrieval where being slightly wrong removes evidence
+#: instead of reordering it, which is why these are worth normalizing rather
+#: than leaving to the caller to guess.
+_RUNTIME_ALIASES: Mapping[str, str] = MappingProxyType(
+    {
+        "node": "nodejs",
+        "node.js": "nodejs",
+        "nodejs": "nodejs",
+        "js": "nodejs",
+        "javascript": "nodejs",
+        "typescript": "nodejs",
+        "ts": "nodejs",
+        "py": "python",
+        "python3": "python",
+        "golang": "go",
+        ".net": "dotnet",
+        "net": "dotnet",
+        "csharp": "dotnet",
+        "c#": "dotnet",
+    }
+)
+
+_FIELD_ALIASES: Mapping[str, Mapping[str, str]] = MappingProxyType({"runtime": _RUNTIME_ALIASES})
+
+
+def _canonical_filter_value(field_name: str, value: str) -> str:
+    aliases = _FIELD_ALIASES.get(field_name)
+    if aliases is None:
+        return value
+    return aliases.get(value, value)
 
 
 class EmbeddingProvider(Protocol):
@@ -104,7 +140,11 @@ class RetrievalIntent:
         object.__setattr__(
             self,
             "explicit_filters",
-            {key: normalize_query(value) for key, value in self.explicit_filters.items() if value},
+            {
+                key: _canonical_filter_value(key, normalize_query(value))
+                for key, value in self.explicit_filters.items()
+                if value
+            },
         )
 
 
@@ -628,6 +668,39 @@ async def _record_retrieval_event(
         )
 
 
+async def _unmatched_filters(
+    executor: Executor, intent: RetrievalIntent | None
+) -> dict[str, list[str]]:
+    """Explicit filter values the active index does not use, with what it does.
+
+    Only consulted when a search comes back empty, so the common path pays
+    nothing. It exists because a hard filter on a value the corpus never stores
+    removes every candidate, and the resulting emptiness is indistinguishable
+    from a genuine documentation gap — the exact conflation RULES.md §1 forbids.
+    """
+    if intent is None or not intent.explicit_filters:
+        return {}
+
+    columns = {
+        "service": DocumentChunk.service,
+        "runtime": DocumentChunk.runtime,
+        "framework": DocumentChunk.framework,
+    }
+    unmatched: dict[str, list[str]] = {}
+    for field_name, requested in intent.explicit_filters.items():
+        column = columns[field_name]
+        rows = await executor.execute(
+            select(column)
+            .join(IndexVersion, IndexVersion.id == DocumentChunk.index_version_id)
+            .where(IndexVersion.is_active.is_(True), column.is_not(None))
+            .distinct()
+        )
+        present = sorted({str(value) for (value,) in rows})
+        if requested not in present:
+            unmatched[field_name] = present
+    return unmatched
+
+
 async def search_documentation(
     executor: Executor,
     query: str,
@@ -673,6 +746,43 @@ async def search_documentation(
         result for result in results if result.similarity >= settings.retrieval_similarity_threshold
     ]
     if not above_threshold:
+        # Before calling this a documentation gap, rule out the caller having
+        # filtered on a value the corpus does not use. Both look like "nothing
+        # found"; only one of them is about the documentation.
+        unmatched = await _unmatched_filters(executor, intent)
+        if unmatched:
+            field_name, present = next(iter(unmatched.items()))
+            requested = intent.explicit_filters[field_name] if intent else ""
+            filter_code = ErrorCode.NO_RESULTS_FOR_FILTER
+            await _record_retrieval_event(
+                executor,
+                query=query,
+                results=results,
+                threshold=settings.retrieval_similarity_threshold,
+                telemetry=telemetry,
+                error_code=filter_code,
+            )
+            logger.info(
+                "retrieval filtered on a value the corpus does not use",
+                extra={
+                    "error_code": filter_code.value,
+                    "trace_id": telemetry.trace_id,
+                    "filter_field": field_name,
+                    "filter_value": requested,
+                },
+            )
+            raise RescueError(
+                filter_code,
+                detail=(
+                    f"{field_name}={requested!r} matches no chunk in the active index; "
+                    f"values present: {', '.join(present) or '(none)'}"
+                ),
+                context={
+                    "filter_field": field_name,
+                    "filter_value": requested,
+                    "filter_values_present": present,
+                },
+            )
         code = ErrorCode.NO_RESULTS_ABOVE_THRESHOLD
         await _record_retrieval_event(
             executor,

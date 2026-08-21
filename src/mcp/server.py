@@ -198,11 +198,26 @@ def build_mcp_server(*, stateless: bool = True) -> FastMCP:
         ],
         service: Annotated[
             str | None,
-            Field(default=None, description="Liara service name, only when the user stated it."),
+            Field(
+                default=None,
+                description=(
+                    "Liara service, only when the user stated it — for example "
+                    "paas, ubuntu, redis, postgresql. A hard filter; omit it "
+                    "rather than guess."
+                ),
+            ),
         ] = None,
         runtime: Annotated[
             str | None,
-            Field(default=None, description="Runtime such as node or python, when stated."),
+            Field(
+                default=None,
+                description=(
+                    "Runtime, only when the user stated it. The index uses "
+                    "nodejs, python, php, go, docker, dotnet, static; common "
+                    "aliases such as node or golang are normalized. This is a "
+                    "hard filter — omit it rather than guess."
+                ),
+            ),
         ] = None,
         framework: Annotated[
             str | None,
@@ -277,11 +292,26 @@ def build_mcp_server(*, stateless: bool = True) -> FastMCP:
         ] = None,
         service: Annotated[
             str | None,
-            Field(default=None, description="Liara service name, only when the user stated it."),
+            Field(
+                default=None,
+                description=(
+                    "Liara service, only when the user stated it — for example "
+                    "paas, ubuntu, redis, postgresql. A hard filter; omit it "
+                    "rather than guess."
+                ),
+            ),
         ] = None,
         runtime: Annotated[
             str | None,
-            Field(default=None, description="Runtime such as node or python, when stated."),
+            Field(
+                default=None,
+                description=(
+                    "Runtime, only when the user stated it. The index uses "
+                    "nodejs, python, php, go, docker, dotnet, static; common "
+                    "aliases such as node or golang are normalized. This is a "
+                    "hard filter — omit it rather than guess."
+                ),
+            ),
         ] = None,
     ) -> dict[str, Any]:
         """Return documentation evidence and related questions for one failure.
