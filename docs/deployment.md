@@ -271,20 +271,26 @@ latency, and provider throttling during the 300-user test.
 
 9. **Set env vars through the Liara panel's secrets UI.** Never deploy a `.env` file.
 
-### Provisioning status (2026-08-20)
+### Provisioning status (verified 2026-08-21)
 
-The Liara team `6a87191155e397b04b0bead8` currently has the existing
+The Liara team selected by the local, gitignored `LIARA_TEAM_ID` currently has the existing
 `liaradb` PostgreSQL service plus `liara-rescue-redis`, `liara-rescue-api`,
 `liara-rescue-worker`, `liara-rescue-gateway`, `liara-rescue-prometheus`,
 `liara-rescue-grafana`, `liara-rescue-loki`, and `liara-rescue-alloy`. All were
 created on private network `liara-challenge`; the three monitoring disks above
-were also created. Pgvector was enabled in the Liara panel on 2026-08-20; its
-SQL version check is still pending. The pinned gateway, Prometheus, Grafana,
+were also created. A read-only production SQL check on 2026-08-21 confirmed
+`vector` 0.8.1 and `pg_trgm` 1.6 are installed. The pinned gateway, Prometheus, Grafana,
 Loki, and Alloy releases have each passed their public HTTPS health endpoint.
 The API and worker have not been released because their Liara environment does
 not yet have the complete database, Redis, provider, and admin secret set.
 Migrations, ingestion, application readiness, and the 300-user load test remain
-deployment gates.
+deployment gates. A same-day CLI check showed all seven `liara-rescue-*` apps
+as `ACTIVE` and both managed databases as `OK`; those control-plane states do
+not replace the pending public API readiness check. The API's deployed HTTPS
+base URL is `https://liara-rescue-api.liara.run`; on 2026-08-21,
+`GET /health/ready` returned HTTP 503, so task 2.6 remains open. By contrast,
+the local Compose endpoint at `http://localhost:8000/health/ready` returned 200
+with Postgres, Redis, the active index, and the gateway all healthy.
 
 > **Account hygiene.** This account already hosts `royara-api`, `royara-db`, and `makeupapp`, which are unrelated to this project. Every name above is prefixed `liara-rescue-` so nothing collides, and no existing resource is touched.
 

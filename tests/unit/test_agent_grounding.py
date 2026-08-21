@@ -124,13 +124,39 @@ async def test_citations_are_reconstructed_from_retrieved_public_deep_links() ->
             "evidence_id": "chunk:django-envs",
             "text": "متغیرها را در تنظیمات برنامه وارد کنید.",
             "metadata": {"source_path": "src/pages/paas/django/getting-started.mdx"},
+            "images": [
+                {
+                    "url": "https://media.liara.ir/django-envs.png",
+                    "alt": "فرم متغیرهای محیطی",
+                    "ordinal": 2,
+                    "heading_anchor": "envs",
+                },
+                {"url": "javascript:alert(1)", "alt": "نامعتبر"},
+            ],
             "citation": {
                 "url": "https://docs.liara.ir/paas/django/getting-started#envs",
                 "page_title": "شروع کار با Django",
                 "section_title": "متغیرهای محیطی",
                 "source_commit": "dbb7430",
             },
-        }
+        },
+        {
+            "evidence_id": "chunk:uncited",
+            "text": "راهنمای نامرتبط",
+            "metadata": {"source_path": "src/pages/paas/nodejs/about.mdx"},
+            "images": [
+                {
+                    "url": "https://media.liara.ir/uncited.png",
+                    "alt": "تصویر شاهد ارجاع‌نشده",
+                }
+            ],
+            "citation": {
+                "url": "https://docs.liara.ir/paas/nodejs#about",
+                "page_title": "Node.js",
+                "section_title": "معرفی",
+                "source_commit": "dbb7430",
+            },
+        },
     ]
     result = await BoundedAgent(
         ScriptedModel([_tool_call(), _answer("chunk:django-envs")]),
@@ -145,6 +171,15 @@ async def test_citations_are_reconstructed_from_retrieved_public_deep_links() ->
     assert citation.page_title == "شروع کار با Django"
     assert citation.section_title == "متغیرهای محیطی"
     assert "src/pages" not in citation.url
+    assert result.images == (
+        {
+            "evidence_id": "chunk:django-envs",
+            "url": "https://media.liara.ir/django-envs.png",
+            "alt": "فرم متغیرهای محیطی",
+            "ordinal": 2,
+            "heading_anchor": "envs",
+        },
+    )
 
 
 @pytest.mark.asyncio

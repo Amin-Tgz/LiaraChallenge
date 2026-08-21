@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
@@ -188,6 +188,46 @@ test('citations show the page title and section, and deep-link to the anchor', (
   expect(link.getAttribute('href')).toContain('#steps')
   expect(link.textContent).toContain('ساخت برنامه‌ی Django')
   expect(link.textContent).toContain('مراحل')
+})
+
+test('a cited image is beside its citation and falls back to alt text without losing the answer', () => {
+  render(
+    <div>
+      <p>پاسخ همچنان قابل خواندن است.</p>
+      <Citations
+        citations={[
+          {
+            evidence_id: 'e1',
+            url: 'https://docs.liara.ir/paas/django#deploy',
+            page_title: 'استقرار Django',
+            section_title: 'مراحل',
+            source_commit: 'abc',
+          },
+        ]}
+        images={[
+          {
+            evidence_id: 'e1',
+            url: 'https://media.liara.ir/missing.png',
+            alt: 'نمای دکمهٔ استقرار در پنل',
+          },
+        ]}
+      />
+    </div>,
+  )
+
+  const citation = screen.getByRole('listitem')
+  const image = within(citation).getByRole('img', { name: 'نمای دکمهٔ استقرار در پنل' })
+  expect(image.tagName).toBe('IMG')
+
+  fireEvent.error(image)
+
+  const fallback = within(citation).getByRole('img', {
+    name: 'نمای دکمهٔ استقرار در پنل',
+  })
+  expect(fallback.tagName).toBe('P')
+  expect(fallback.textContent).toContain('نمای دکمهٔ استقرار در پنل')
+  expect(screen.getByText('پاسخ همچنان قابل خواندن است.')).toBeDefined()
+  expect(document.querySelector('img')).toBeNull()
 })
 
 test('submitting the landing question routes to related questions', async () => {

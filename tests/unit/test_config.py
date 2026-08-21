@@ -88,3 +88,38 @@ def test_distinct_judge_is_accepted() -> None:
 )
 def test_ingest_scope_is_configuration_not_code(raw: str, expected: list[str]) -> None:
     assert _settings(ingest_sections=raw).ingest_section_list == expected
+
+
+# --- DATABASE_URL driver scheme -------------------------------------------
+#
+# Liara's panel hands out `postgresql://…`. SQLAlchemy's `create_async_engine`
+# rejects that scheme outright, so an operator pasting the panel value verbatim
+# takes both the API and the worker down at boot. Normalize instead of relying
+# on every human remembering to type `+asyncpg`.
+
+
+def test_bare_postgresql_scheme_is_normalized_to_asyncpg() -> None:
+    settings = _settings(database_url="postgresql://root:pw@liaradb:5432/postgres")
+    assert settings.database_url == "postgresql+asyncpg://root:pw@liaradb:5432/postgres"
+
+
+def test_postgres_alias_scheme_is_normalized_to_asyncpg() -> None:
+    settings = _settings(database_url="postgres://root:pw@liaradb:5432/postgres")
+    assert settings.database_url == "postgresql+asyncpg://root:pw@liaradb:5432/postgres"
+
+
+def test_explicit_asyncpg_scheme_is_left_alone() -> None:
+    url = "postgresql+asyncpg://rescue:rescue@postgres:5432/rescue"
+    assert _settings(database_url=url).database_url == url
+
+
+def test_a_non_async_driver_is_rejected_rather_than_silently_rewritten() -> None:
+    # psycopg2 is a deliberate choice, not a paste artifact; rewriting it would
+    # hide the operator's intent. Fail loudly instead.
+    with pytest.raises(ValueError, match="DATABASE_URL"):
+        _settings(database_url="postgresql+psycopg2://root:pw@liaradb:5432/postgres")
+
+
+def test_a_non_postgres_url_is_rejected() -> None:
+    with pytest.raises(ValueError, match="DATABASE_URL"):
+        _settings(database_url="mysql://root:pw@liaradb:3306/postgres")

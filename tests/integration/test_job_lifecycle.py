@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import get_settings
 from src.core.errors import ErrorCode, RescueError
-from src.db.models.conversation import AnonymousSession, Conversation, RequestJob
+from src.db.models.conversation import AnonymousSession, Conversation, Message, RequestJob
 from src.db.models.enums import JobStatus
 from src.services.agent import AgentCitation, AgentTurnResult
 from src.services.job_runner import process_job
@@ -73,6 +73,13 @@ def _answer(content: str = "برای استقرار از liara deploy استفا
                 section_title="deploy",
                 source_commit="a" * 40,
             ),
+        ),
+        images=(
+            {
+                "evidence_id": "e1",
+                "url": "https://media.liara.ir/deploy.png",
+                "alt": "مرحلهٔ استقرار",
+            },
         ),
     )
 
@@ -152,6 +159,15 @@ async def test_successful_job_records_every_transition(
         JobStatus.COMPLETED,
     ]
     assert job.result_message_id is not None
+    message = await db_session.get(Message, job.result_message_id)
+    assert message is not None
+    assert message.images == [
+        {
+            "evidence_id": "e1",
+            "url": "https://media.liara.ir/deploy.png",
+            "alt": "مرحلهٔ استقرار",
+        }
+    ]
     assert job.finished_at is not None
 
 

@@ -99,6 +99,7 @@ class AgentTurnResult:
     rewrites: int
     total_tokens: int
     citations: tuple[AgentCitation, ...] = ()
+    images: tuple[dict[str, Any], ...] = ()
     needs_clarification: bool = False
     clarification_field: str | None = None
     limit_reason: str | None = None
@@ -140,6 +141,7 @@ def _collect_evidence(
     output: Any,
     evidence: dict[str, AgentCitation],
     evidence_metadata: dict[str, dict[str, Any]],
+    evidence_images: dict[str, tuple[dict[str, Any], ...]],
 ) -> None:
     items = output if isinstance(output, list) else [output]
     for item in items:
@@ -161,6 +163,43 @@ def _collect_evidence(
         )
         metadata = item.get("metadata")
         evidence_metadata[evidence_id] = dict(metadata) if isinstance(metadata, dict) else {}
+        raw_images = item.get("images")
+        evidence_images[evidence_id] = (
+            tuple(dict(image) for image in raw_images if isinstance(image, dict))
+            if isinstance(raw_images, list)
+            else ()
+        )
+
+
+def _cited_images(
+    citation_ids: Sequence[str],
+    evidence_images: Mapping[str, Sequence[Mapping[str, Any]]],
+) -> tuple[dict[str, Any], ...]:
+    """Return safe, de-duplicated images from the evidence the answer cited.
+
+    Retrieved but uncited chunks are deliberately excluded: showing their
+    screenshots beside an answer would imply a relationship the model did not
+    claim. Only HTTP(S) sources are accepted from the untrusted docs corpus.
+    """
+    images: list[dict[str, Any]] = []
+    seen_urls: set[str] = set()
+    for evidence_id in citation_ids:
+        for raw in evidence_images.get(evidence_id, ()):
+            url = raw.get("url")
+            if (
+                not isinstance(url, str)
+                or not url.lower().startswith(("https://", "http://"))
+                or url in seen_urls
+            ):
+                continue
+            seen_urls.add(url)
+            image: dict[str, Any] = {"evidence_id": evidence_id, "url": url}
+            for field in ("alt", "caption", "ordinal", "heading_anchor"):
+                value = raw.get(field)
+                if isinstance(value, str | int) and not isinstance(value, bool):
+                    image[field] = value
+            images.append(image)
+    return tuple(images)
 
 
 def _clarification_parts(raw_content: Any) -> tuple[str, str] | None:
@@ -282,6 +321,7 @@ class BoundedAgent:
         conversation: list[dict[str, Any]],
         evidence: Mapping[str, AgentCitation],
         evidence_metadata: Mapping[str, Mapping[str, Any]],
+        evidence_images: Mapping[str, Sequence[Mapping[str, Any]]],
         telemetry: GatewayTelemetry,
         tool_calls: int,
         rewrites: int,
@@ -333,6 +373,7 @@ class BoundedAgent:
                 citation_ids = []
 
         citations: list[AgentCitation] = []
+        images: tuple[dict[str, Any], ...] = ()
         if reason is None:
             unknown = [evidence_id for evidence_id in citation_ids if evidence_id not in evidence]
             if unknown:
@@ -354,6 +395,8 @@ class BoundedAgent:
                         citations = []
                         break
                     citations.append(citation)
+                if reason is None:
+                    images = _cited_images(citation_ids, evidence_images)
 
         if reason is not None:
             await self._record_no_evidence(
@@ -384,6 +427,7 @@ class BoundedAgent:
             rewrites=rewrites,
             total_tokens=total_tokens,
             citations=tuple(citations),
+            images=images,
             limit_reason=limit_reason,
             error_code=ErrorCode.AGENT_LIMIT_REACHED if limit_reason else None,
         )
@@ -423,6 +467,7 @@ class BoundedAgent:
         total_tokens = 0
         evidence: dict[str, AgentCitation] = {}
         evidence_metadata: dict[str, dict[str, Any]] = {}
+        evidence_images: dict[str, tuple[dict[str, Any], ...]] = {}
         query_forms = {normalize_query(question)}
         limit_reason: str | None = None
 
@@ -501,6 +546,7 @@ class BoundedAgent:
                     conversation=conversation,
                     evidence=evidence,
                     evidence_metadata=evidence_metadata,
+                    evidence_images=evidence_images,
                     telemetry=telemetry,
                     tool_calls=tool_calls_used,
                     rewrites=rewrites_used,
@@ -556,6 +602,7 @@ class BoundedAgent:
                     conversation=conversation,
                     evidence=evidence,
                     evidence_metadata=evidence_metadata,
+                    evidence_images=evidence_images,
                     telemetry=telemetry,
                     tool_calls=tool_calls_used,
                     rewrites=rewrites_used,
@@ -608,7 +655,7 @@ class BoundedAgent:
                     query_forms.add(query)
                     rewrites_used += 1
                 output = await self.tools.execute(name, arguments)
-                _collect_evidence(output, evidence, evidence_metadata)
+                _collect_evidence(output, evidence, evidence_metadata, evidence_images)
                 tool_calls_used += 1
                 conversation.append(
                     {

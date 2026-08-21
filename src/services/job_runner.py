@@ -111,7 +111,7 @@ async def persist_turn(
         role=MessageRole.ASSISTANT.value,
         content=result.content,
         citations=citations_payload(result.citations),
-        images=[],
+        images=list(result.images),
         error_code=str(result.error_code) if result.error_code is not None else None,
         # The agent accumulates one budget figure across a turn's several
         # completions and does not carry the prompt/completion split back out.
@@ -132,6 +132,7 @@ def _final_payload(result: AgentTurnResult, message_id: uuid.UUID) -> dict[str, 
         "message_id": str(message_id),
         "answer": result.content,
         "citations": citations_payload(result.citations),
+        "images": list(result.images),
         "needs_clarification": result.needs_clarification,
         "clarification_field": result.clarification_field,
         "tool_calls": result.tool_calls,

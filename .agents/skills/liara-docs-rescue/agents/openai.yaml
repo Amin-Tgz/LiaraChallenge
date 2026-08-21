@@ -1,0 +1,4 @@
+interface:
+  display_name: "Liara Docs Rescue"
+  short_description: "Answer Liara questions from cited docs evidence"
+  default_prompt: "Use $liara-docs-rescue to diagnose this Liara issue from retrieved documentation evidence."

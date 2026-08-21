@@ -17,7 +17,7 @@ import {
 } from '../api/client'
 import type { ConversationDetail, Job, Message } from '../api/types'
 import { useJobStream } from '../api/useJobStream'
-import { Citations, Figures } from '../components/Citations'
+import { Citations } from '../components/Citations'
 import { JobProgress } from '../components/JobProgress'
 import { Markdown } from '../components/Markdown'
 
@@ -188,8 +188,7 @@ function Turn({ message, isAnswer }: { message: Message; isAnswer: boolean }) {
   return (
     <>
       <Markdown>{message.content}</Markdown>
-      <Figures images={message.images} />
-      <Citations citations={message.citations} />
+      <Citations citations={message.citations} images={message.images} />
       {isAnswer && message.citations.length === 0 && message.error_code && (
         // An answer with no citations is an abstention, and says so.
         <p className="abstention" role="note">

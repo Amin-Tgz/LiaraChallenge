@@ -26,9 +26,12 @@ export type Citation = {
 }
 
 export type ChatImage = {
+  evidence_id?: string | null
   url: string
   alt?: string | null
   caption?: string | null
+  ordinal?: number | null
+  heading_anchor?: string | null
 }
 
 export type Message = {
@@ -103,6 +106,7 @@ export type FinalEvent = {
   message_id: string
   answer: string
   citations: Citation[]
+  images: ChatImage[]
   needs_clarification: boolean
   clarification_field: string | null
   tool_calls: number

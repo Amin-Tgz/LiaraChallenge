@@ -2,8 +2,8 @@
 
 - [ ] 1.1 Rotate the AvalAI API key exposed during planning and verify the old key returns 401
 - [x] 1.2 Create Postgres via `liara db:create` per docs/deployment.md §4; verify it appears in `liara db:list` with status OK
-- [ ] 1.3 **Manual step — the CLI cannot do this.** Enable Pgvector in the Liara panel before any data exists, accept the restart, then verify `SELECT extversion FROM pg_extension WHERE extname='vector'` returns a version
-- [ ] 1.4 Check `pg_trgm` availability via `pg_available_extensions` and record the result in design.md Open Questions
+- [x] 1.3 **Manual step — the CLI cannot do this.** Enable Pgvector in the Liara panel before any data exists, accept the restart, then verify `SELECT extversion FROM pg_extension WHERE extname='vector'` returns a version
+- [x] 1.4 Check `pg_trgm` availability via `pg_available_extensions` and record the result in design.md Open Questions
 - [x] 1.5 Create Redis and the `liara-rescue-api`, `-worker`, and `-gateway` app services per docs/deployment.md §4; verify each appears in `liara app:list` and shares a private network with the database
 - [ ] 1.6 Confirm the fallback provider is reachable **from a deployed container** (not a local machine) and record the working base URL
 
@@ -94,7 +94,7 @@
 - [x] 11.3 Implement the related-questions view labeled as related questions, with solved/unresolved actions; verify below-threshold results show the not-found state and offer rescue tools
 - [x] 11.4 Implement the rescue-tools view with plain-language descriptions of Skill, MCP, and Chat; verify moving between tools preserves the original question
 - [x] 11.5 Implement chat view with streaming, Markdown, syntax-highlighted code blocks, per-block copy, links, and citations showing page title and section; verify each renders correctly
-- [ ] 11.6 Render associated images beside their step or citation with alt-text fallback; verify a broken image URL leaves the answer intact
+- [x] 11.6 Render associated images beside their step or citation with alt-text fallback; verify a broken image URL leaves the answer intact
 - [x] 11.7 Implement RTL layout with LTR code blocks and correct mixed Persian/Latin inline rendering; verify against fixtures containing both
 - [x] 11.8 Surface queued, retrieving, generating, retrying, completed, and failed states in plain language; verify failures state their cause rather than a generic message
 - [x] 11.9 Verify reload during generation restores conversation and job status without restarting generation
@@ -102,7 +102,7 @@
 
 ## 12. Skill
 
-- [ ] 12.1 Author the Skill encoding the workflow from the agent-integrations spec; verify it instructs retrieval before answering and abstention without evidence
+- [x] 12.1 Author the Skill encoding the workflow from the agent-integrations spec; verify it instructs retrieval before answering and abstention without evidence
 - [ ] 12.2 Add installation instructions, a version identifier, and a worked example; verify the example runs against the deployed service
 - [ ] 12.3 **Verify the Skill end to end inside at least one real coding agent**
 
