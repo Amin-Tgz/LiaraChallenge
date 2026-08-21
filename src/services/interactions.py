@@ -10,12 +10,23 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 
 from src.core.errors import ErrorCode, RescueError
+from src.core.logging import get_logger
 from src.core.normalization import normalize_query
 from src.db.models import AnonymousSession, Conversation, FaqItem, UsageEvent
 from src.db.models.enums import RescueTool, UsageEventType
 
+logger = get_logger(__name__)
 Executor = AsyncSession | AsyncConnection
 FAQ_INTERACTION_TYPES = frozenset({UsageEventType.FAQ_IMPRESSION, UsageEventType.FAQ_SELECTION})
+
+#: Marks the one row per search, as distinct from the one row per shown entry
+#: that `record_faq_interaction` writes. Queries that want to count questions
+#: rather than results filter on it.
+SEARCH_MARKER = "result_count"
+
+#: Payload key holding the output of `normalize_query`. Named here, beside the
+#: only code that writes it, so a reader cannot guess at a different spelling.
+NORMALIZED_QUESTION_KEY = "question_normalized"
 
 
 async def record_faq_interaction(
@@ -100,7 +111,7 @@ async def record_faq_interaction(
                     "faq_item_id": faq_item_id,
                     "rescue_tool": rescue_tool.value if rescue_tool else None,
                     "question": question,
-                    "payload": {"question_normalized": normalized},
+                    "payload": {NORMALIZED_QUESTION_KEY: normalized},
                 }
                 for faq_item_id in ids
             ],
@@ -113,3 +124,44 @@ async def record_faq_interaction(
             detail="database failed while recording FAQ interaction",
         ) from err
     return len(ids)
+
+
+async def record_faq_search(
+    executor: Executor,
+    *,
+    session_id: uuid.UUID | None,
+    question: str,
+    result_count: int,
+    similarity_threshold: float,
+) -> None:
+    """Record that a search happened, including one that matched nothing.
+
+    Impressions are written per shown entry and only when something was shown,
+    so they cannot answer either of the two questions an operator actually has
+    after moving a threshold: how many searches there were, and how many of them
+    returned anything. This row is the denominator for both.
+
+    Never raises. A search that succeeded must not fail because its analytics
+    row could not be written.
+    """
+    normalized = normalize_query(question)
+    if not normalized:
+        return
+    try:
+        await executor.execute(
+            UsageEvent.__table__.insert().values(
+                event_type=UsageEventType.FAQ_IMPRESSION.value,
+                session_id=session_id,
+                question=question,
+                payload={
+                    NORMALIZED_QUESTION_KEY: normalized,
+                    SEARCH_MARKER: result_count,
+                    "similarity_threshold": similarity_threshold,
+                },
+            )
+        )
+    except SQLAlchemyError as err:
+        logger.warning(
+            "could not record FAQ search; the search itself was unaffected",
+            extra={"cause": type(err).__name__},
+        )

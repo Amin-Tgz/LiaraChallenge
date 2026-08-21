@@ -1,5 +1,12 @@
 # Liara Documentation Rescue Assistant
 
+![Startcooch Vibe Coding Hackathon](docs/images/hackathon.jpg)
+
+**Built for the Startcooch «Vibe Coding» hackathon** (هکاتون وایب کدینگ استارکوچ,
+28–30 Mordad), for which Liara is one of the sponsoring platforms. The judging
+criteria and what this project does about each of them are in
+[Judging criteria](#judging-criteria) at the end.
+
 **دستیار نجات مستندات لیارا** — a system for people who are stuck in Liara's
 documentation and are not getting unstuck by reading more of it.
 
@@ -15,25 +22,41 @@ refusing to collapse those two into "no results found".
 
 ## What it does
 
-A stuck user writes their question in full — the error message, what they tried,
-what they expected — and the system moves them through four stages:
+The front page is the conversation. A stuck user writes their question in full —
+the error message, what they tried, what they expected — and everything happens
+on that one screen:
 
 1. **Related questions.** A semantic search over FAQ entries generated from the
-   real documentation. Deliberately labelled *related questions*, not *answers*:
-   they are matched by similarity, and calling them answers would promise more
-   than the match justifies. No answer-generation model runs on this path, so it
-   is fast and cheap.
-2. **A judgement.** The user says whether that helped. "It did not" is recorded
-   with the question and the pages implicated — that is the documentation-gap
-   signal, stored rather than merely counted.
-3. **Rescue tools.** Three ways out, described by the situation each suits
-   rather than by what it is: a chat assistant, an installable Skill for a
-   coding agent, and an MCP server. The original question travels into whichever
-   one they pick; they never retype it.
-4. **Grounded chat.** A bounded agent that answers from retrieved documentation
-   only. Every technical claim carries a citation that deep-links to the section
-   it came from. When the evidence is insufficient it abstains and says so
-   rather than guessing.
+   real documentation, shown inline. Deliberately labelled *related questions*,
+   not *answers*: they are matched by similarity, and calling them answers would
+   promise more than the match justifies. No answer-generation model runs on
+   this path, so it is fast and cheap.
+2. **A judgement.** The user says whether that helped, and nothing is generated
+   until they say it did not. "It did not" is recorded with the question and the
+   pages implicated — that is the documentation-gap signal, stored rather than
+   merely counted.
+3. **Grounded chat.** A bounded agent that answers from retrieved documentation
+   only, in the same place. Every technical claim carries a citation that
+   deep-links to the section it came from. When the evidence is insufficient it
+   abstains and says so rather than guessing. While it works, it shows the real
+   search steps it is taking — the tool, the query, how many passages came back
+   and how close the best one was.
+4. **A verdict on the answer.** 👍/👎 with a reason, joined server-side to the
+   pages that answer cited. That join is what turns a complaint into "this page
+   keeps producing bad answers", which is the only actionable form of it.
+
+Two further ways in live in the sidebar, for people who would rather stay in
+their editor: an installable **Skill** for a coding agent, and an **MCP server**
+exposing documentation search, page reading, and diagnosis as tools.
+
+A conversation has no turn limit. Turns that fall outside the replayed window
+are summarized server-side, so cost stays bounded without the conversation ever
+being cut off.
+
+`/demo` is a stand-in Liara documentation page carrying the rescue widget, to
+show where this belongs: not on its own site, but in the corner of the page
+somebody is already stuck on. `/admin` is the operator console — feedback and
+metrics — behind the existing HTTP Basic guard.
 
 ---
 
@@ -225,15 +248,17 @@ complete list. The ones most worth understanding:
 | Variable | Default | Why it is what it is |
 |---|---|---|
 | `EMBEDDING_DIMENSIONS` | `1536` | pgvector's HNSW ceiling is 2,000. Validated at startup. |
-| `RETRIEVAL_SIMILARITY_THRESHOLD` | `0.25` | Below this, results are suppressed and the gap is recorded. |
-| `FAQ_SIMILARITY_THRESHOLD` | `0.4` | Admin-editable at runtime. |
-| `FAQ_SHORT_QUERY_SIMILARITY_THRESHOLD` | `0.6` | Greetings and other tiny queries must clear a stronger relevance bar. |
+| `RETRIEVAL_SIMILARITY_THRESHOLD` | `0.2125` | Below this, results are suppressed and the gap is recorded. Relaxed 15% from 0.25 after live use. |
+| `FAQ_SIMILARITY_THRESHOLD` | `0.34` | Admin-editable at runtime. Relaxed 15% from 0.4: real questions phrased in a user's own words were sitting just under the old bar. |
+| `FAQ_SHORT_QUERY_SIMILARITY_THRESHOLD` | `0.51` | Greetings and other tiny queries must clear a stronger relevance bar. Same 15% relaxation, from 0.6. |
 | `FAQ_ITEMS_PER_DOCUMENT` | `15` | Upper bound for useful candidates; every accepted answer must be complete, precise, and sized to its evidence. |
 | `FAQ_MAX_OUTPUT_TOKENS` | `12288` | Generation headroom, not a target length; answers must not be padded or fabricated. |
 | `RETRIEVAL_DUPLICATE_THRESHOLD` | `0.9` | Near-identical passages consume one evidence slot. |
 | `AGENT_TOKEN_BUDGET` | `32000` | Must hold one retrieval round (`RETRIEVAL_TOP_K` × `CHUNK_MAX_TOKENS` ≈ 9.6k) plus the answer. At the previous 8000, every well-retrieved question terminated as `AGENT_LIMIT_REACHED` before it could answer. |
 | `AGENT_MAX_TOOL_CALLS` | `3` | Enforced in code, not requested in the prompt. |
-| `MAX_CONVERSATION_TURNS` | `3` | The next draft starts a fresh rescue flow instead of growing unbounded context. |
+| `MAX_HISTORY_TURNS` | `3` | How many turns are replayed verbatim. Older ones are summarized, not dropped. |
+| `CONVERSATION_SUMMARY_TRIGGER_TURNS` | `3` | Past this, turns outside the window are folded into a running summary. Invisible to the user. |
+| `MAX_CONVERSATION_TURNS` | `40` | An abuse ceiling, not a product rule. A normal conversation never reaches it. |
 | `JOB_MAX_ATTEMPTS` | `3` | Retries are bounded; exhausted attempts reach `failed`, never loop. |
 | `JOB_LEASE_SECONDS` | `90` | How long a dead worker's job waits before reclamation. |
 
@@ -292,7 +317,7 @@ src/
   core/         config, structured logging, the error taxonomy
   api/v1/       routers, registered centrally in routes.py
   db/models/    async SQLAlchemy 2.x models
-  services/     ingestion, retrieval, faq, agent, jobs, job_runner
+  services/     ingestion, retrieval, faq, agent, jobs, job_runner, summarization
   mcp/          MCP tools over the shared retrieval core
   worker.py     queue consumer
 alembic/        migrations — every schema change, no create_all
@@ -315,3 +340,100 @@ Code follows these. When code and spec disagree, the spec is updated first.
 Precedence: the active change beats `deployment.md` on specifics,
 `deployment.md` beats the plan on infrastructure, and the plan beats
 `deployment.md` on product scope.
+
+---
+
+## Judging criteria
+
+What follows maps each hackathon criterion to the specific thing in this
+repository that addresses it, with a file to look at.
+
+**Rows marked *planned* are not built yet.** They carry the OpenSpec task that
+owns them. A table that claims work nobody did is worth less than a table that
+says where the edges are, so the edges are stated.
+
+### 1. Answer quality and correctness — 80 points
+
+| Criterion | What addresses it | Where |
+|---|---|---|
+| Correct and relevant answers | Hybrid retrieval — dense pgvector + lexical, fused with RRF, metadata-boosted — over chunks cut at real `<Section>` boundaries rather than by character count | `src/services/retrieval.py`, `src/services/ingestion/mdx.py` |
+| Complete, usable answers | FAQ generation requires numbered steps, verbatim commands and config values, prerequisites, limits, and how to verify success; one-sentence answers are refused for "how" questions | `src/services/faq.py` `SYSTEM_PROMPT` |
+| Finding the right information | Three tools the agent can choose between — search, read a specific page, diagnose a failure — plus query rewriting within a bounded budget | `src/services/agent_tools.py` |
+| Fewer wrong or invented answers | Every technical claim must cite a retrieved evidence id; the answer is validated against the evidence set before it is persisted, and citation-less answers are marked abstentions | `src/services/agent.py` `_final_result` |
+| Citing sources | Citations deep-link to the page *and section* that produced them, with the corpus commit they came from | `web/src/components/Citations.tsx`, `src/services/retrieval.py` |
+| Simple and complex questions alike | Simple ones are answered by the FAQ fast path with no model call at all; complex ones go to the bounded agent. Short queries clear a stricter relevance bar so "سلام" matches nothing | `src/services/faq.py` `match_faqs` |
+
+The system abstains rather than guessing. `NO_ACTIVE_INDEX`,
+`NO_RESULTS_ABOVE_THRESHOLD`, `NO_RESULTS_FOR_FILTER`, and `NO_EVIDENCE` are
+four different failures with four different messages — collapsing them into
+"nothing found" is what hides an outage behind something that looks normal.
+
+*Planned:* the golden-set evaluation harness with Recall@k, citation
+correctness, and an LLM judge distinct from the model under test — tasks 16.1–16.5.
+
+### 2. UI and user experience — 55 points
+
+| Criterion | What addresses it | Where |
+|---|---|---|
+| Design quality and ease of use | One chat surface. Ask, judge what the documentation already offers, continue into the assistant — no page changes in between | `web/src/views/LandingView.tsx` |
+| Conversation experience | Streamed answers over SSE; the live trace shows the real search steps, the actual query, result counts, and the best similarity — no simulated progress | `web/src/components/ThinkingTrace.tsx` |
+| Code, links, and technical detail | Persian RTL body with LTR-isolated code blocks and inline code, syntax highlighting, per-block copy, and cited images beside the step they illustrate | `web/src/components/Markdown.tsx`, `Citations.tsx` |
+| Continuing a conversation | No turn limit. Older turns are summarized server-side, and a reload mid-answer restores the transcript and rejoins the running job instead of starting a second one | `src/services/summarization.py`, `web/src/views/ChatView.tsx` |
+| Responsive | Fixed sidebar on desktop, focus-managed drawer on mobile, safe-area-aware composer; verified at 375px and 1440px in both themes | `web/src/styles.css` |
+| UX detail | Enter submits and Shift+Enter newlines with IME composition respected, visible focus rings, skip link, `aria-live` job status, persisted light/dark, and a favicon cropped to the readable part of the mark | `web/src/keyboard.ts`, `web/index.html` |
+
+### 3. Agentic capability and personalization — 50 points
+
+| Criterion | What addresses it | Where |
+|---|---|---|
+| Understanding intent | A conversation-scoped technical profile — service, runtime, framework, deployment mode — extracted and carried as context across turns | `src/services/technical_profile.py` |
+| Asking a follow-up when needed | Clarification is allowed only when the retrieved alternatives actually diverge on the missing detail; a clarification that would not change the answer is rejected and the model is made to answer | `src/services/agent.py` `_clarification_is_load_bearing` |
+| Keeping context | Recent turns verbatim, older ones in a running incremental summary; each turn is summarized at most once | `src/services/summarization.py` |
+| Personalized answers | The profile narrows retrieval filters, and a filter that matches nothing reports `NO_RESULTS_FOR_FILTER` rather than silently widening | `src/services/agent_tools.py` |
+| Suggesting a next step | The FAQ gate names the next move explicitly; an abstention says what was searched and what was missing rather than stopping | `web/src/components/FaqGate.tsx` |
+| Multi-step processes | An explicit bounded loop — tool calls and query rewrites capped in code, not asked for in the prompt — with every step observable | `src/services/agent.py` |
+| Creative use of agentic capability | The same retrieval core is exposed three ways: web chat, an installable Skill for a coding agent, and an MCP server with strict tool schemas, so the answer a coding agent gets is the answer the site gives | `src/mcp/`, `.agents/skills/liara-docs-rescue/SKILL.md` |
+
+Retrieved documentation is treated as untrusted data throughout. The system
+prompt states the boundary, tool results are wrapped with an explicit
+`untrusted_data_not_instructions` marker, and the conversation summary carries
+the same marker — text recalled from a previous turn is data too.
+
+### 4. Security, reliability, and monitoring — 50 points
+
+| Criterion | What addresses it | Where |
+|---|---|---|
+| Rate limiting | Per-IP and per-session windows in Redis, returning the rate-limited code rather than a generic rejection | `src/services/rate_limit.py` |
+| API keys and secrets | Keys live in Liara's secrets panel and a gitignored local `.env`; no credential reaches the frontend bundle; the admin console holds its password in memory only, never in browser storage | `src/core/config.py` `SECRET_FIELDS` |
+| Error and failure handling | A closed taxonomy where every code carries its own Persian message, HTTP status, operator action, and retry classification | `src/core/errors.py`, `docs/deployment.md` §10 |
+| Token and request control | A hard agent token budget, capped tool calls and rewrites, and a FAQ gate that calls no model until the user says the documentation did not help | `src/core/config.py` |
+| Logging and monitoring | Structured JSON logs, Prometheus metrics, and a dashboard where every figure derives from a recorded event and an unmeasured metric reports its absence instead of rendering as zero | `src/services/dashboard.py`, `monitoring/` |
+| Maintainable architecture | Jobs are persisted before they are enqueued and answered by a separate worker; SSE resumes from `Last-Event-ID`; a dead worker's lease expires and its job is reclaimed | `src/services/job_runner.py`, `src/services/jobs.py` |
+
+*Planned:* secret redaction in log records (14.3), cross-process correlation ids
+(14.5), Opik tracing spans (14.6), and per-request cost attribution (14.7).
+
+### 5. Deployment on Liara — 40 points
+
+| Criterion | What addresses it | Where |
+|---|---|---|
+| Running on Liara | API, worker, and a Portkey gateway container on Liara, with managed PostgreSQL + pgvector and Redis on a private network | `docs/deployment.md` §3–§4 |
+| Deployment quality | Documented deploy order with the two failure modes that each cost a deploy, health endpoints separating liveness from readiness, and a rollback path | `docs/deployment.md` §9–§10 |
+| Configuration | Every threshold, budget, model id, and timeout is an environment variable validated at startup; retrieval tuning is additionally admin-editable at runtime without a redeploy | `src/core/config.py`, `src/services/runtime_config.py` |
+| Production readiness | Alembic for every schema change, immutable index versions with atomic activation and retained rollback targets, idempotency keys on submission | `alembic/`, `src/services/ingestion/` |
+
+*Planned:* CI and gated deploy workflows with automatic rollback — tasks 17.1–17.5.
+
+### 6. Cost optimization — 25 points
+
+| Criterion | What addresses it | Where |
+|---|---|---|
+| Model and service choice | `gemini-3.7-flash` for chat and FAQ generation; embeddings at 1536 dimensions rather than the native 3072, which is both cheaper and the only size pgvector can HNSW-index | `docs/deployment.md` §2 |
+| Token control | A hard agent token budget checked before and after every model call, with capped tool calls and rewrites | `src/services/agent.py` |
+| Avoiding unnecessary requests | The FAQ path costs one embedding and no generation; the gate means a question the documentation already answers never reaches the model at all; history summarization keeps cost flat as a conversation grows instead of linear in its length | `src/services/faq.py`, `src/services/summarization.py` |
+| Caching and reuse | Idempotency keys make a retried submission provably the same job; a reload rejoins the running job rather than starting a second one; a no-change reindex performs no embedding | `src/services/jobs.py` |
+| Infrastructure cost | Sized and priced per service before provisioning, with the reasoning recorded | `docs/deployment.md` §4, §8 |
+| Quality against cost | The two-stage design is the trade-off made explicit: cheap retrieval first, generation only when it is actually needed, and abstention rather than an expensive guess | — |
+
+Token usage and cost per request are recorded as usage events and surfaced on
+the dashboard, so the trade-off can be checked rather than asserted.

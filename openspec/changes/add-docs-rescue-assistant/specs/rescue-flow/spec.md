@@ -1,6 +1,6 @@
 ## Purpose
 
-The user journey from a single typed question through related questions, resolution feedback, and escalation to one of three rescue tools — holding the question and conversation intact across every hop so the user never retypes and never loses their place.
+The user journey from a single typed question through related questions, resolution feedback, and escalation to the assistant — holding the question and conversation intact so the user never retypes and never loses their place. The journey happens on one chat surface; the Skill and MCP paths are reachable from a persistent sidebar rather than being a step in it.
 
 ## ADDED Requirements
 
@@ -46,24 +46,57 @@ Primary state SHALL NOT live only in client memory or client-side storage. Conve
 - **WHEN** a user closes the tab and reopens the application within the session
 - **THEN** the prior conversation and its messages are shown
 
-### Requirement: Rescue tool selection
+### Requirement: Single chat surface with an inline related-questions gate
 
-After a user reports that their question remains unresolved, the system SHALL present three paths — an installable Skill, an MCP connection, and in-app chat — described in plain language rather than protocol terminology.
+The landing view SHALL be the conversation surface. Submitting a question SHALL NOT change route: related questions SHALL be presented inline for the user to judge, and the answering model SHALL NOT be called until the user reports them insufficient. When no related question clears the threshold, the system SHALL open the conversation directly.
 
-#### Scenario: Tools presented on unresolved
+#### Scenario: Related questions offered before any generation
 
-- **WHEN** the user reports the question is still unresolved
-- **THEN** the three rescue paths are presented with plain-language descriptions of when each applies
+- **WHEN** a submitted question matches related questions above the threshold
+- **THEN** they are shown inline with an explicit accept/reject choice, and no answering model call has been made
 
-#### Scenario: Movement between tools preserves context
+#### Scenario: Rejection opens the conversation with the same wording
 
-- **WHEN** the user selects one rescue path and then returns and selects another
-- **THEN** the original question and conversation are preserved and not restarted
+- **WHEN** the user reports the related questions did not help
+- **THEN** a conversation is opened with the question exactly as typed, and the rejection is recorded with the entries that were on screen
 
-#### Scenario: Backward navigation
+#### Scenario: No match goes straight to the assistant
 
-- **WHEN** the user navigates back from a rescue tool
-- **THEN** the previous step is restored with its prior state intact
+- **WHEN** no related question clears the threshold
+- **THEN** the conversation opens directly without an intermediate step
+
+### Requirement: Persistent navigation for conversations and rescue tools
+
+The system SHALL present conversation history and the Skill and MCP paths in a persistent sidebar, described in plain language rather than protocol terminology. History SHALL NOT be capped in the interface. On narrow viewports the sidebar SHALL become a dismissible drawer that manages focus.
+
+#### Scenario: Every conversation is reachable
+
+- **WHEN** a session has any number of prior conversations
+- **THEN** all of them are listed in the sidebar, and the current one is marked
+
+#### Scenario: Rescue tools always reachable
+
+- **WHEN** the user is anywhere in the application
+- **THEN** the Skill and MCP paths are reachable in one action, with plain-language descriptions of when each applies
+
+#### Scenario: Drawer is keyboard-operable
+
+- **WHEN** the sidebar is opened as a drawer and the user presses Escape
+- **THEN** it closes and focus returns to the control that opened it
+
+### Requirement: Documentation embed demonstration
+
+The system SHALL provide a demonstration page reproducing a Liara documentation page carrying a floating rescue widget, to show where the assistant is intended to be used. The page SHALL be labelled as a demonstration and SHALL NOT present its content as real documentation.
+
+#### Scenario: Demonstration is labelled
+
+- **WHEN** the demonstration page is opened
+- **THEN** a persistently visible notice states the content is not real documentation and links to the official site
+
+#### Scenario: Widget invites and leads to the assistant
+
+- **WHEN** the user hovers or focuses the widget
+- **THEN** the stuck-user illustration and invitation are revealed, and activating it opens the assistant
 
 ### Requirement: Bidirectional text rendering
 
@@ -151,23 +184,47 @@ The interface SHALL offer accessible light and dark themes, initialize from the 
 
 ### Requirement: Rescue illustrations and visible thinking state
 
-The landing and rescue-tool views SHALL use the supplied illustrations for the stopped, Chat, Skill, and MCP states. While a chat job is queued, retrieving, generating, or retrying, the interface SHALL cycle through the four supplied thinking frames at one-second intervals without replacing the job's accessible status text.
+Each rescue tool's page SHALL carry its own supplied illustration, and the stopped illustration SHALL appear where a user is actually stuck — revealed by the documentation-page widget — rather than on the assistant's own landing view. While a chat job is queued, retrieving, generating, or retrying, the interface SHALL cycle through the four supplied thinking frames at one-second intervals without replacing the job's accessible status text.
 
-#### Scenario: Rescue paths have distinct illustrations
+#### Scenario: Each tool page carries its illustration
 
-- **WHEN** the landing or rescue-tool view is rendered
-- **THEN** the corresponding stopped, Chat, Skill, and MCP illustration is present with meaningful alternative text
+- **WHEN** the Skill or MCP page is rendered
+- **THEN** the corresponding illustration is present with meaningful alternative text
 
 #### Scenario: Thinking frames continue until completion
 
 - **WHEN** a chat job remains active
 - **THEN** the visual advances to the next thinking frame every second and stops when the job completes or fails
 
-### Requirement: Conversation handoff after three turns
+### Requirement: Answer-level feedback
 
-The maximum user turns in one chat SHALL be configurable and SHALL default to three. Once reached, the next typed question SHALL be transferred into the landing view's «سؤال شما» field for confirmation as a fresh rescue flow rather than extending the old model context.
+Each generated answer SHALL offer the user a helpful/unhelpful verdict, and an unhelpful verdict SHALL collect a reason from a fixed vocabulary. Submitting a verdict SHALL NOT be able to disturb the answer being read, and a verdict already recorded SHALL be shown back rather than requested again.
 
-#### Scenario: Fourth question becomes a fresh draft
+#### Scenario: Rejection collects an actionable reason
 
-- **WHEN** three user turns already exist and the user enters another question
-- **THEN** no fourth chat job is created and the text appears in the landing question field ready for submission
+- **WHEN** the user marks an answer unhelpful
+- **THEN** a reason is requested from a fixed set that distinguishes an incorrect answer from an incomplete, irrelevant, or wrongly sourced one
+
+#### Scenario: Feedback failure is invisible
+
+- **WHEN** submitting the verdict fails
+- **THEN** the transcript is unaffected and no error is raised to the user
+
+#### Scenario: A recorded verdict survives reload
+
+- **WHEN** the conversation is reloaded after a verdict was given
+- **THEN** the recorded verdict is shown instead of the prompt
+
+### Requirement: Unbounded conversation with an abuse ceiling
+
+A conversation SHALL NOT be cut off at a small turn limit. Turns beyond the configured verbatim window SHALL be summarized rather than dropped, invisibly to the user. A configurable ceiling SHALL remain solely to bound abuse.
+
+#### Scenario: A fourth question is answered
+
+- **WHEN** three user turns already exist and the user asks another question
+- **THEN** the question is answered in the same conversation, with earlier turns represented by their summary
+
+#### Scenario: The ceiling names its own cause
+
+- **WHEN** a conversation exceeds the configured abuse ceiling
+- **THEN** the refusal states that the conversation has grown too long, distinctly from any other failure

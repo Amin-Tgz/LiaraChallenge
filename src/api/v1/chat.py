@@ -29,9 +29,21 @@ from src.core.config import Settings, get_settings
 from src.core.errors import ErrorCode, RescueError, spec_for
 from src.core.logging import get_logger
 from src.core.normalization import normalize_query
-from src.db.models.conversation import AnonymousSession, Conversation, Message, RequestJob
-from src.db.models.enums import TERMINAL_JOB_STATUSES, MessageRole
+from src.db.models.conversation import (
+    AnonymousSession,
+    Conversation,
+    Feedback,
+    Message,
+    RequestJob,
+)
+from src.db.models.enums import (
+    TERMINAL_JOB_STATUSES,
+    FeedbackOutcome,
+    FeedbackReason,
+    MessageRole,
+)
 from src.db.session import get_session, get_sessionmaker
+from src.services.feedback import record_chat_feedback
 from src.services.job_runner import next_ordinal
 from src.services.jobs import (
     JobEventType,
@@ -68,6 +80,13 @@ class CitationOut(BaseModel):
     source_commit: str | None = None
 
 
+class MessageFeedbackOut(BaseModel):
+    """A judgement already recorded on this answer, so a reload shows it back."""
+
+    outcome: FeedbackOutcome
+    reason: FeedbackReason | None = None
+
+
 class MessageOut(BaseModel):
     id: uuid.UUID
     ordinal: int
@@ -76,6 +95,21 @@ class MessageOut(BaseModel):
     citations: list[CitationOut] = Field(default_factory=list)
     images: list[dict[str, Any]] = Field(default_factory=list)
     error_code: str | None = None
+    feedback: MessageFeedbackOut | None = None
+
+
+class MessageFeedbackRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    outcome: FeedbackOutcome
+    reason: FeedbackReason | None = None
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class MessageFeedbackResponse(BaseModel):
+    feedback_id: uuid.UUID
+    outcome: FeedbackOutcome
+    reason: FeedbackReason | None = None
 
 
 class JobOut(BaseModel):
@@ -134,7 +168,7 @@ def _job_out(job: RequestJob) -> JobOut:
     )
 
 
-def _message_out(message: Message) -> MessageOut:
+def _message_out(message: Message, feedback: MessageFeedbackOut | None = None) -> MessageOut:
     return MessageOut(
         id=message.id,
         ordinal=message.ordinal,
@@ -143,6 +177,7 @@ def _message_out(message: Message) -> MessageOut:
         citations=[CitationOut(**citation) for citation in (message.citations or [])],
         images=list(message.images or []),
         error_code=message.error_code,
+        feedback=feedback,
     )
 
 
@@ -361,14 +396,63 @@ async def get_conversation(
         .scalars()
         .all()
     )
+    # The user's own verdicts come back with the transcript, so a reload does
+    # not invite them to rate the same answer twice.
+    verdicts = {
+        row.message_id: MessageFeedbackOut(
+            outcome=FeedbackOutcome(row.outcome),
+            reason=FeedbackReason(row.reason) if row.reason else None,
+        )
+        for row in (
+            await db.execute(
+                select(Feedback.message_id, Feedback.outcome, Feedback.reason)
+                .where(
+                    Feedback.conversation_id == conversation.id,
+                    Feedback.message_id.is_not(None),
+                )
+                .order_by(Feedback.created_at)
+            )
+        ).all()
+    }
     return ConversationDetail(
         id=conversation.id,
         initial_question=conversation.initial_question,
         title=conversation.title,
         technical_profile=dict(conversation.technical_profile or {}),
         rescue_tool=conversation.rescue_tool,
-        messages=[_message_out(message) for message in messages],
+        messages=[_message_out(message, verdicts.get(message.id)) for message in messages],
         jobs=[_job_out(job) for job in jobs],
+    )
+
+
+@router.post("/messages/{message_id}/feedback", response_model=MessageFeedbackResponse)
+async def create_message_feedback(
+    message_id: uuid.UUID,
+    payload: MessageFeedbackRequest,
+    request: Request,
+    response: Response,
+    db: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[object, Depends(rate_limited)] = None,
+) -> MessageFeedbackResponse:
+    """Judge one answer.
+
+    Only the verdict is accepted. The question and the documentation pages the
+    answer relied on are read from the message itself, so the record cannot be
+    shaped by whoever is submitting it.
+    """
+    session = await resolve_session(db, request, response)
+    record = await record_chat_feedback(
+        db,
+        session_id=session.id,
+        message_id=message_id,
+        outcome=payload.outcome,
+        reason=payload.reason,
+        note=payload.note,
+    )
+    return MessageFeedbackResponse(
+        feedback_id=record.feedback_id,
+        outcome=record.outcome,
+        reason=payload.reason,
     )
 
 

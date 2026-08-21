@@ -34,6 +34,21 @@ export type ChatImage = {
   heading_anchor?: string | null
 }
 
+/** Why an answer fell short. Mirrors `FeedbackReason`. */
+export type FeedbackReason =
+  | 'incorrect'
+  | 'incomplete'
+  | 'irrelevant'
+  | 'wrong_source'
+  | 'other'
+
+export type FeedbackOutcome = 'resolved' | 'unresolved'
+
+export type MessageFeedback = {
+  outcome: FeedbackOutcome
+  reason: FeedbackReason | null
+}
+
 export type Message = {
   id: string
   ordinal: number
@@ -42,6 +57,8 @@ export type Message = {
   citations: Citation[]
   images: ChatImage[]
   error_code: string | null
+  /** A verdict this browser already gave, so a reload does not re-ask. */
+  feedback: MessageFeedback | null
 }
 
 /**
@@ -102,6 +119,22 @@ export type StatusEvent = {
   message?: string
 }
 export type DeltaEvent = { text: string }
+/**
+ * One step the agent took looking for evidence.
+ *
+ * Commentary on the work rather than part of the answer: it lives only on the
+ * relay stream, so a reload mid-answer replays it and a finished conversation
+ * does not carry it.
+ */
+export type TraceEvent = {
+  step: number
+  tool: string
+  query: string | null
+  result_count: number | null
+  top_similarity: number | null
+  status: 'ok' | 'limit'
+  elapsed_ms: number
+}
 export type FinalEvent = {
   message_id: string
   answer: string

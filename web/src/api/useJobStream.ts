@@ -18,12 +18,15 @@ import type {
   FinalEvent,
   JobStatus,
   StatusEvent,
+  TraceEvent,
 } from './types'
 
 export type StreamState = {
   status: JobStatus
   /** Answer text accumulated so far. Grows as `delta` entries arrive. */
   answer: string
+  /** Search steps the agent has taken so far, in order. */
+  trace: TraceEvent[]
   citations: Citation[]
   /** Set only when the job reached a terminal failure. */
   errorCode: string | null
@@ -36,6 +39,7 @@ export type StreamState = {
 const INITIAL: StreamState = {
   status: 'queued',
   answer: '',
+  trace: [],
   citations: [],
   errorCode: null,
   errorMessage: null,
@@ -59,6 +63,16 @@ export function useJobStream(jobId: string | null): StreamState {
     source.addEventListener('status', (event) => {
       const data = JSON.parse((event as MessageEvent).data) as StatusEvent
       setState((prev) => ({ ...prev, status: data.status, attempt: data.attempt }))
+    })
+
+    source.addEventListener('trace', (event) => {
+      const message = event as MessageEvent
+      // Replayed after a reconnect, exactly like deltas, so the same guard
+      // keeps a resumed stream from listing every step twice.
+      if (seen.current.has(message.lastEventId)) return
+      seen.current.add(message.lastEventId)
+      const data = JSON.parse(message.data) as TraceEvent
+      setState((prev) => ({ ...prev, trace: [...prev.trace, data] }))
     })
 
     source.addEventListener('delta', (event) => {

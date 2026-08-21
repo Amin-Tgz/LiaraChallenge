@@ -229,12 +229,15 @@ class GatewayChatClient:
         tool_choice: str | Mapping[str, Any] | None = None,
         response_format: Mapping[str, Any] | None = None,
         reasoning_effort: str | None = None,
+        max_completion_tokens: int | None = None,
         telemetry: GatewayTelemetry | None = None,
     ) -> ChatCompletion:
         """Return a completion, failing over only after a transient primary failure."""
         if not messages:
             raise RescueError(ErrorCode.INVALID_REQUEST, detail="chat messages cannot be empty")
         payload: dict[str, Any] = {"messages": [dict(message) for message in messages]}
+        if max_completion_tokens is not None:
+            payload["max_completion_tokens"] = max_completion_tokens
         if tools is not None:
             payload["tools"] = [dict(tool) for tool in tools]
         if tool_choice is not None:

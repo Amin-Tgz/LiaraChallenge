@@ -215,11 +215,14 @@ ERROR_SPECS: dict[ErrorCode, ErrorSpec] = {
         code=ErrorCode.HISTORY_LIMIT_REACHED,
         http_status=409,
         message_fa=(
-            "این گفت‌وگو به سقف نوبت‌های مجاز رسیده است. " "پرسش بعدی را در یک گفت‌وگوی تازه بپرسید."
+            "این گفت‌وگو به سقف نوبت‌های مجاز رسیده و بسیار طولانی شده است. "
+            "برای ادامه، پرسش بعدی را در یک گفت‌وگوی تازه بپرسید."
         ),
         operator_action=(
-            "Expected conversation boundary; the client should move the draft "
-            "to a fresh landing question."
+            "An abuse ceiling, not the ordinary end of a conversation — older "
+            "turns are summarized, so a normal thread never reaches this. Seeing "
+            "it often means MAX_CONVERSATION_TURNS is set too low or one session "
+            "is looping."
         ),
         transient=False,
     ),

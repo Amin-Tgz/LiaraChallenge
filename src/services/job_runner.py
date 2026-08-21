@@ -17,7 +17,7 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -42,6 +42,7 @@ from src.services.jobs import (
     refresh_lease,
 )
 from src.services.metrics import JOB_ATTEMPTS, JOB_DURATION, JOB_OUTCOMES, JOBS_IN_FLIGHT
+from src.services.summarization import build_conversation_context
 
 logger = get_logger(__name__)
 
@@ -61,29 +62,24 @@ async def conversation_history(
     conversation_id: uuid.UUID,
     *,
     settings: Settings | None = None,
+    telemetry: GatewayTelemetry | None = None,
 ) -> list[dict[str, Any]]:
-    """Prior user/assistant turns, newest-last, capped at the configured depth.
+    """Prior context for this turn: recent turns verbatim, older ones summarized.
 
-    Tool messages are deliberately excluded: replaying a previous turn's tool
-    traffic would spend this turn's token budget on evidence it already used.
+    Kept as a thin wrapper over `build_conversation_context` so callers that only
+    want chat messages do not have to know that anything beyond the configured
+    window was condensed rather than dropped.
     """
     settings = settings or get_settings()
-    limit = max(settings.max_history_turns, 0) * 2
-    if limit == 0:
+    if max(settings.max_history_turns, 0) == 0:
         return []
-
-    rows = await session.execute(
-        select(Message)
-        .where(
-            Message.conversation_id == conversation_id,
-            Message.role.in_((MessageRole.USER.value, MessageRole.ASSISTANT.value)),
-        )
-        .order_by(Message.ordinal.desc())
-        .limit(limit)
+    context = await build_conversation_context(
+        session,
+        conversation_id,
+        settings=settings,
+        telemetry=telemetry,
     )
-    turns = list(rows.scalars().all())
-    turns.reverse()
-    return [{"role": turn.role, "content": turn.content} for turn in turns]
+    return list(context.as_messages())
 
 
 async def next_ordinal(session: AsyncSession, conversation_id: uuid.UUID) -> int:
@@ -159,6 +155,31 @@ async def _lease_heartbeat(
         await refresh_lease(redis, job_id, settings=settings)
 
 
+def _trace_publisher(
+    redis: Redis,
+    job_id: uuid.UUID,
+    *,
+    settings: Settings,
+) -> Callable[[Mapping[str, Any]], Awaitable[None]]:
+    """A sink for the agent's search steps, safe to fail.
+
+    What the agent did to find an answer is worth showing while the user waits,
+    but it is commentary on the work, not the work. A relay that cannot accept
+    it is logged and ignored — never allowed to fail the job it is describing.
+    """
+
+    async def emit(step: Mapping[str, Any]) -> None:
+        try:
+            await publish(redis, job_id, JobEventType.TRACE, dict(step), settings=settings)
+        except Exception as err:  # noqa: BLE001 — commentary must never break the answer
+            logger.warning(
+                "could not publish agent trace step",
+                extra={"job_id": str(job_id), "cause": type(err).__name__},
+            )
+
+    return emit
+
+
 async def process_job(
     session: AsyncSession,
     redis: Redis,
@@ -189,7 +210,19 @@ async def process_job(
         )
 
         conversation = await session.get(Conversation, job.conversation_id)
-        history = await conversation_history(session, job.conversation_id, settings=settings)
+        telemetry = GatewayTelemetry(
+            trace_id=job.trace_id,
+            session_id=conversation.session_id if conversation is not None else None,
+            conversation_id=job.conversation_id,
+            job_id=job.id,
+            question=job.question,
+        )
+        history = await conversation_history(
+            session,
+            job.conversation_id,
+            settings=settings,
+            telemetry=telemetry,
+        )
 
         await record_transition(session, job, JobStatus.GENERATING)
         await session.commit()
@@ -205,13 +238,8 @@ async def process_job(
             session,
             question=job.question,
             messages=history,
-            telemetry=GatewayTelemetry(
-                trace_id=job.trace_id,
-                session_id=conversation.session_id if conversation is not None else None,
-                conversation_id=job.conversation_id,
-                job_id=job.id,
-                question=job.question,
-            ),
+            telemetry=telemetry,
+            on_trace=_trace_publisher(redis, job.id, settings=settings),
         )
 
         message = await persist_turn(session, job, result)

@@ -380,16 +380,18 @@ EMBEDDING_TIMEOUT_SECONDS=120  # a merely-slow request must not be retried as a 
 INDEX_RETENTION_COUNT=2        # superseded versions kept; at least 1 or rollback has no target
 
 # --- Retrieval ---
-FAQ_SIMILARITY_THRESHOLD=0.4   # cosine SIMILARITY, not pgvector distance
+# Relaxed 15% from 0.4/0.6/0.25 after live use: questions phrased in a user's
+# own words were landing just under the old bars and returning nothing.
+FAQ_SIMILARITY_THRESHOLD=0.34   # cosine SIMILARITY, not pgvector distance
 FAQ_SHORT_QUERY_MAX_CHARS=8
-FAQ_SHORT_QUERY_SIMILARITY_THRESHOLD=0.6   # suppress greetings matching unrelated FAQs
+FAQ_SHORT_QUERY_SIMILARITY_THRESHOLD=0.51   # suppress greetings matching unrelated FAQs
 FAQ_TOP_K=5
 FAQ_CANDIDATE_MULTIPLIER=4    # over-fetch so dedupe can still fill the requested slots
 FAQ_PRIORITY_WEIGHT=0.01       # ordering only: similarity + priority * weight; never changes exposed similarity
 RETRIEVAL_TOP_K=8
 RETRIEVAL_CANDIDATE_MULTIPLIER=3
 RETRIEVAL_DUPLICATE_THRESHOLD=0.9
-RETRIEVAL_SIMILARITY_THRESHOLD=0.25   # below this is NO_RESULTS_ABOVE_THRESHOLD
+RETRIEVAL_SIMILARITY_THRESHOLD=0.2125   # below this is NO_RESULTS_ABOVE_THRESHOLD
 RRF_K=60
 RRF_DENSE_WEIGHT=1.0
 RRF_LEXICAL_WEIGHT=1.0
@@ -402,8 +404,16 @@ AGENT_MAX_REWRITES=2
 AGENT_TOKEN_BUDGET=32000
 AGENT_TIMEOUT_SECONDS=60
 MAX_QUESTION_CHARS=2000
-MAX_HISTORY_TURNS=3
-MAX_CONVERSATION_TURNS=3
+MAX_HISTORY_TURNS=3            # turns replayed verbatim; older ones are summarized
+MAX_CONVERSATION_TURNS=40      # abuse ceiling only — no longer the product's turn limit
+
+# --- Conversation summarization ---
+# Past the trigger, turns outside MAX_HISTORY_TURNS are folded into a running
+# summary. Each turn is summarized once, so cost stays flat as a thread grows.
+CONVERSATION_SUMMARY_TRIGGER_TURNS=3
+CONVERSATION_SUMMARY_MODEL=            # blank falls back to LLM_MODEL
+CONVERSATION_SUMMARY_MAX_TOKENS=800
+CONVERSATION_SUMMARY_TIMEOUT_SECONDS=30
 
 # --- Rate limiting ---
 RATE_LIMIT_PER_IP_PER_MINUTE=30
@@ -672,7 +682,7 @@ Every failure carries a stable machine code, a Persian user-facing message that 
 | `DOCUMENT_PARSE_FAILED` | MDX pre-pass produced no text for a non-empty source document | «یکی از صفحه‌های مستندات قابل پردازش نبود و ایندکس نشد. این یک خطای پردازش مستندات است، نه نبود پاسخ.» | Inspect that document's `discarded_char_ratio` and the unrecognized tags in the ingestion report; upstream likely added a component the §7 table misses |
 | `FAQ_GENERATION_FAILED` | FAQ model/gateway call failed for a document | «تولید پرسش‌های مرتبط از مستندات ناموفق بود. پرسش‌های معتبر قبلی همچنان در دسترس‌اند.» | Check the FAQ request and gateway response |
 | `FAQ_OUTPUT_INVALID` | One generated FAQ entry failed structured validation | «خروجی تولید پرسش‌های مرتبط ساختار معتبر نداشت و ذخیره نشد. سایر پرسش‌های معتبر پردازش شدند.» | Inspect recorded validation errors and source document |
-| `HISTORY_LIMIT_REACHED` | A client attempted another user turn after the configured conversation boundary | «این گفت‌وگو به سقف نوبت‌های مجاز رسیده است. پرسش بعدی را در یک گفت‌وگوی تازه بپرسید.» | Expected boundary; move the draft to the fresh-question flow |
+| `HISTORY_LIMIT_REACHED` | A conversation passed `MAX_CONVERSATION_TURNS`. This is an abuse ceiling, not the ordinary end of a conversation — older turns are summarized, so a normal thread never reaches it | «این گفت‌وگو به سقف نوبت‌های مجاز رسیده و بسیار طولانی شده است. برای ادامه، پرسش بعدی را در یک گفت‌وگوی تازه بپرسید.» | Seeing it often means the ceiling is set too low or one session is looping |
 | `SKILL_NOT_AVAILABLE` | The deployment artifact does not contain the configured Skill file | «فایل Skill در این استقرار در دسترس نیست.» | Check `SKILL_FILE_PATH` and deployment inclusion of `.agents/skills/liara-docs-rescue` |
 
 `NO_ACTIVE_INDEX` (system broken) and `NO_RESULTS_ABOVE_THRESHOLD` (working correctly, real docs gap) must **never** share a message. One is an outage; the other is your product's most valuable data.
@@ -699,6 +709,11 @@ Behind HTTP Basic from `ADMIN_USERNAME` / `ADMIN_PASSWORD`, mounted under
 `/api/v1/admin`. Unset credentials mean the surface refuses **everyone** — a
 deployment that forgot the variables gets a locked door, not an open one.
 
+The web console at `/admin` is a face on these same routes and adds no
+authentication of its own. It holds the credentials **in memory only** — never
+`localStorage`, never `sessionStorage` — so a reload asks again rather than
+leaving an administrator's password on the disk of whatever browser was used.
+
 | Route | Purpose |
 |---|---|
 | `GET /admin/faq` | Page and search the FAQ corpus; `embedded: false` marks an entry that cannot match |
@@ -707,6 +722,7 @@ deployment that forgot the variables gets a locked door, not an open one.
 | `GET/PUT/DELETE /admin/config/{key}` | Runtime tuning without a redeploy |
 | `POST /admin/sync` → `GET /admin/sync` | Trigger an incremental reindex, then poll it |
 | `GET /admin/dashboard` | Every figure, each with an explicit `no_data` flag |
+| `GET /admin/feedback` | Individual verdicts with the answer each one judged, filterable by stage, outcome, and window |
 | `GET /admin/index-versions` | Recent versions, so a rollback target is chosen by evidence |
 
 **Runtime configuration** is an allowlist — `faq_similarity_threshold`,
@@ -728,6 +744,26 @@ it, or an explicit `no_data`. There is no third state. Zero is a measurement
 identically shows a healthy 0% failure rate for a system that has been down
 since deploy. Cost is reported only over events that actually carry one, so an
 unpriced model is never presented as free.
+
+**Answer-quality figures** come from chat-stage feedback, which is recorded per
+answer and joined server-side to the documentation pages that answer cited:
+
+| Metric | The question it answers |
+|---|---|
+| `chat_satisfaction_rate` | What share of generated answers the user judged helpful |
+| `lowest_rated_pages` | Which documentation pages keep backing rejected answers — the actionable one |
+| `feedback_reasons` | Whether the failures are "incomplete" (corpus), "irrelevant" (retrieval), or "incorrect" (grounding) |
+| `top_questions` | What people actually ask, grouped on the normalized form, counted once per search |
+| `top_cited_pages` | Which parts of the corpus the answers lean on; read against `lowest_rated_pages` |
+| `questions_over_time` | Daily volume, with quiet days absent rather than zero-filled |
+| `abstention_rate` | How often the system honestly declined; near zero on a corpus with known gaps means it is answering things it should not |
+| `faq_hit_rate` | What share of searches returned anything above the threshold — the number to watch after moving one |
+
+`faq_hit_rate` and `top_questions` need a row per *search*, including searches
+that matched nothing. Impressions are written per shown entry and only when
+something was shown, so the search itself is recorded server-side in
+`POST /faq/search` with a `result_count` payload; those rows are what both
+metrics count.
 
 ### Verified against production, 2026-08-21
 

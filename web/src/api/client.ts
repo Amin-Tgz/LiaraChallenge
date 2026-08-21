@@ -13,6 +13,8 @@ import type {
   ConversationSummary,
   ErrorBody,
   FaqSearchResponse,
+  FeedbackOutcome,
+  FeedbackReason,
   Job,
   RescueToolName,
 } from './types'
@@ -112,6 +114,23 @@ export function listConversations(): Promise<ConversationSummary[]> {
 
 export function getJob(id: string): Promise<Job> {
   return request<Job>(`/chat/jobs/${id}`)
+}
+
+/**
+ * Judge one answer.
+ *
+ * Only the verdict is sent. The question and the documentation pages the answer
+ * relied on are read server-side from the message itself, so this call cannot
+ * mis-attribute a complaint to the wrong page.
+ */
+export function submitMessageFeedback(
+  messageId: string,
+  payload: { outcome: FeedbackOutcome; reason?: FeedbackReason; note?: string },
+): Promise<{ feedback_id: string }> {
+  return request<{ feedback_id: string }>(`/chat/messages/${messageId}/feedback`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
 }
 
 export function recordFeedback(payload: {

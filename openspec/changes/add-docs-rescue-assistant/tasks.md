@@ -1,3 +1,18 @@
+# Task list
+
+**Open status, as of 2026-08-21.** Everything below is either checked or listed
+here. Carried into the next session:
+
+- **1.1** — rotate the AvalAI key exposed during planning (needs panel access)
+- **14.3, 14.5–14.9** — remaining observability: log redaction, correlation ids,
+  Opik spans, per-request cost, retry classification, all-providers-unavailable
+- **16.x** — the golden-set evaluation harness and its baseline
+- **17.x** — CI, gated deploy with rollback, scheduled reindex, security checklist
+- **18.x** — demo rehearsal and the Definition-of-Done pass
+- **21.13–21.15** — deploy commit, FAQ regeneration, and the post-deploy check
+
+---
+
 ## 1. Pre-flight verification
 
 - [ ] 1.1 Rotate the AvalAI API key exposed during planning and verify the old key returns 401
@@ -98,7 +113,11 @@
 - [x] 11.1 Implement the landing view with a multi-line question input and immediate server-side persistence; verify the conversation row exists before retrieval starts
 - [x] 11.2 Issue an anonymous session cookie and associate conversations; verify a reopened tab restores prior conversations
 - [x] 11.3 Implement the related-questions view labeled as related questions, with solved/unresolved actions; verify below-threshold results show the not-found state and offer rescue tools
+  - **Superseded by 21.2.** The separate `/related` route was folded into the chat surface
+    as an inline gate; the labelling and feedback requirements it established still hold.
 - [x] 11.4 Implement the rescue-tools view with plain-language descriptions of Skill, MCP, and Chat; verify moving between tools preserves the original question
+  - **Superseded by 21.1.** The `/tools` hub was replaced by the persistent sidebar; the
+    plain-language descriptions moved onto the Skill and MCP pages themselves.
 - [x] 11.5 Implement chat view with streaming, Markdown, syntax-highlighted code blocks, per-block copy, links, and citations showing page title and section; verify each renders correctly
 - [x] 11.6 Render associated images beside their step or citation with alt-text fallback; verify a broken image URL leaves the answer intact
 - [x] 11.7 Implement RTL layout with LTR code blocks and correct mixed Persian/Latin inline rendering; verify against fixtures containing both
@@ -165,7 +184,7 @@
 ## 17. CI/CD and delivery
 
 - [ ] 17.1 Add `ci.yml` running backend lint, format check, and pytest, plus frontend lint, typecheck, test, and build; verify it passes on a clean branch
-- [ ] 17.2 Add a Playwright happy-path test covering landing → related questions → unresolved → rescue tools → chat → answer with citation → reload → history restored; verify it passes against a deployed instance
+- [ ] 17.2 Add a Playwright happy-path test covering landing → inline FAQ gate → unresolved → chat → answer with citation → answer feedback → reload → transcript and verdict restored; verify it passes against a deployed instance
 - [ ] 17.3 Add `deploy.yml` gated on CI, building versioned images, applying migrations, verifying readiness, and rolling back on failure; verify a forced readiness failure triggers rollback
 - [ ] 17.4 Add the reindex workflow on schedule and manual dispatch that exits cheaply when the upstream SHA is unchanged; verify a no-change run performs no embedding
 - [ ] 17.5 Complete the security checklist in docs/deployment.md §11 and verify each item
@@ -232,3 +251,22 @@ correctly-cited answer.
 - [x] 20.10 Expand the downloadable Skill with official source links, the Liara documentation
       information architecture, MDX page schema, route-selection and evidence extraction
       guidance; replace temporary MCP host marks with locally served official logos.
+
+## 21. Chat-first surface, unbounded conversation, and the operator loop
+
+- [x] 21.1 Replace the four-page rescue path with one chat surface plus a persistent sidebar carrying full conversation history and the Skill and MCP pages; verify `/related`, `/tools`, and `/solved` redirect and no navigation is needed to reach either tool
+- [x] 21.2 Present related questions inline with an explicit accept/reject choice; verify no answering-model call is made before the user rejects them, and that a zero-result search opens the conversation directly
+- [x] 21.3 Lower `faq_similarity_threshold`, `faq_short_query_similarity_threshold`, and `retrieval_similarity_threshold` by 15%; verify the short-query bar stays strictly above the general one
+- [x] 21.4 Summarize conversation turns beyond the verbatim window instead of refusing a fourth turn, and reduce `HISTORY_LIMIT_REACHED` to an abuse ceiling; verify summarization is incremental and that its failure degrades to raw history without failing the turn
+- [x] 21.5 Publish each agent tool call as a `trace` relay event and render the real steps while the user waits; verify an unmeasured similarity is reported as absent and a failing relay does not fail the job
+- [x] 21.6 Record a per-answer helpful/unhelpful verdict with a reason, deriving the question and implicated pages from the answer's own record; verify a foreign or non-answer message is refused identically to an unknown one
+- [x] 21.7 Add answer-quality and demand metrics to the dashboard, and record every FAQ search including one that matched nothing; verify each new metric reports absence rather than zero on an empty window
+- [x] 21.8 Add the `/admin` web console over the existing HTTP Basic guard with feedback and metrics tabs; verify it holds credentials in memory only and writes nothing to browser storage
+- [x] 21.9 Add the `/demo` documentation page with the floating rescue widget; verify it is labelled as a demonstration, that hover or focus reveals the stopped illustration, and that it is operable by keyboard
+- [x] 21.10 Make the shell responsive with a focus-managed mobile drawer, and derive the favicon from the deer mark; verify 375px and 1440px in both themes with no horizontal scroll and a clean console
+- [x] 21.11 Strengthen the FAQ generation prompt to require numbered steps, verbatim commands and configuration values, and a way to verify success, and to forbid one-sentence answers to procedural questions
+- [x] 21.12 Update README with the hackathon context and an honest per-criterion mapping, and bring `docs/deployment.md` and the delta specs in line
+- [ ] 21.13 Apply the history-summary and chat-feedback migration to production and deploy API and worker
+- [ ] 21.14 **Regenerate the whole FAQ corpus with `--force` under the new prompt, then read at least ten random entries against their source text and record what that showed**
+- [ ] 21.15 Verify the loop end to end on the deployed instance: ask, reject the answer, and confirm the same question and its cited pages appear in `/admin`
+

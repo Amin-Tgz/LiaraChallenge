@@ -50,6 +50,22 @@ class FeedbackStage(StrEnum):
     CHAT = "chat"
 
 
+class FeedbackReason(StrEnum):
+    """Why an answer fell short.
+
+    A thumbs-down that says only "bad" cannot be acted on. These four separate
+    the failures that need different fixes: a wrong claim is a grounding
+    problem, a thin answer is a corpus problem, an off-topic answer is a
+    retrieval problem, and a bad source is a chunking or citation problem.
+    """
+
+    INCORRECT = "incorrect"
+    INCOMPLETE = "incomplete"
+    IRRELEVANT = "irrelevant"
+    WRONG_SOURCE = "wrong_source"
+    OTHER = "other"
+
+
 class RescueTool(StrEnum):
     SKILL = "skill"
     MCP = "mcp"
@@ -89,6 +105,7 @@ class UsageEventType(StrEnum):
     FAQ_IMPRESSION = "faq_impression"
     FAQ_SELECTION = "faq_selection"
     FAQ_RESOLUTION = "faq_resolution"
+    CHAT_RESOLUTION = "chat_resolution"
     RESCUE_TOOL_TRANSITION = "rescue_tool_transition"
     RETRIEVAL = "retrieval"
     GENERATION = "generation"

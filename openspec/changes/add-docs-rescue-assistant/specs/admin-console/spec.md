@@ -97,3 +97,51 @@ Displayed figures SHALL derive from recorded events. Placeholder or fabricated v
 
 - **WHEN** a metric has no recorded events
 - **THEN** the dashboard indicates the absence of data rather than displaying a fabricated value
+
+### Requirement: Answer-quality and demand metrics
+
+The dashboard SHALL report, from recorded events: the share of generated answers judged helpful, the documentation pages most often backing rejected answers, the distribution of rejection reasons, the most frequently asked questions grouped on their normalized form, the most cited documentation pages, question volume over time, the abstention rate, and the share of FAQ searches returning any result above the threshold. Each SHALL follow the existing no-data contract.
+
+#### Scenario: Poorly rated pages are identifiable
+
+- **WHEN** answers citing a documentation page are repeatedly judged unhelpful
+- **THEN** that page appears in the lowest-rated pages metric with its count
+
+#### Scenario: Demand is counted per question, not per result
+
+- **WHEN** one search returns several related questions
+- **THEN** the question is counted once in the most-asked metric, not once per result shown
+
+#### Scenario: A metric with no events reports its absence
+
+- **WHEN** no chat feedback has been recorded in the window
+- **THEN** the satisfaction rate reports no data rather than a zero
+
+### Requirement: Administrative web console
+
+The system SHALL provide a web interface to the administrative routes presenting recorded feedback and the dashboard metrics. It SHALL introduce no authentication mechanism of its own, SHALL reuse the existing guard, and SHALL NOT persist administrator credentials in browser storage.
+
+#### Scenario: Console is closed before authentication
+
+- **WHEN** the console is opened without credentials
+- **THEN** only a credential prompt is shown and no administrative data is requested
+
+#### Scenario: A refusal discloses nothing extra
+
+- **WHEN** the supplied credentials are rejected
+- **THEN** the console reports the server's single refusal message and remains closed
+
+#### Scenario: Credentials are not written to disk
+
+- **WHEN** credentials have been entered
+- **THEN** no part of them is present in browser storage, and reloading requires entering them again
+
+### Requirement: Individual feedback is readable
+
+The system SHALL expose recorded feedback entries with the question, the answer judged, the reason given, and the documentation pages implicated, filterable by stage, outcome, and time window.
+
+#### Scenario: A complaint can be read in context
+
+- **WHEN** an administrator reads recorded feedback
+- **THEN** each entry shows the question, the answer that was judged, and the pages that answer cited
+

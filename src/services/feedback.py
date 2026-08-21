@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -13,8 +14,14 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 from src.core.errors import ErrorCode, RescueError
 from src.core.logging import get_logger
 from src.core.normalization import normalize_query
-from src.db.models import AnonymousSession, Conversation, FaqItem, Feedback, UsageEvent
-from src.db.models.enums import FeedbackOutcome, FeedbackStage, UsageEventType
+from src.db.models import AnonymousSession, Conversation, FaqItem, Feedback, Message, UsageEvent
+from src.db.models.enums import (
+    FeedbackOutcome,
+    FeedbackReason,
+    FeedbackStage,
+    MessageRole,
+    UsageEventType,
+)
 
 logger = get_logger(__name__)
 Executor = AsyncSession | AsyncConnection
@@ -142,3 +149,148 @@ async def record_faq_feedback(
         outcome=outcome,
         rescue_tools_available=unresolved,
     )
+
+
+async def record_chat_feedback(
+    executor: Executor,
+    *,
+    session_id: uuid.UUID,
+    message_id: uuid.UUID,
+    outcome: FeedbackOutcome,
+    reason: FeedbackReason | None = None,
+    note: str | None = None,
+) -> FeedbackRecord:
+    """Persist a judgement on one assistant answer.
+
+    The caller supplies only the verdict. Everything that makes the verdict
+    analyzable — which question was asked, which documentation pages the answer
+    leaned on — is read from the message itself, because a client that has to
+    assemble that is a client that can get it wrong or omit it.
+
+    The documentation pages come from the answer's own citations. That is what
+    turns a thumbs-down into "this page produces bad answers", which is the only
+    form of this signal anyone can act on.
+    """
+    try:
+        message = (
+            await executor.execute(
+                select(Message)
+                .join(Conversation, Conversation.id == Message.conversation_id)
+                .where(
+                    Message.id == message_id,
+                    Message.role == MessageRole.ASSISTANT.value,
+                    Conversation.session_id == session_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if message is None:
+            # One refusal for "no such message", "not an answer", and "not
+            # yours" — the differences are useful only to someone probing.
+            raise RescueError(
+                ErrorCode.INVALID_REQUEST,
+                detail="feedback names no assistant message belonging to this session",
+            )
+
+        question = await _question_for(executor, message)
+        source_urls = _cited_urls(message.citations)
+
+        feedback_id = uuid.uuid4()
+        await executor.execute(
+            Feedback.__table__.insert().values(
+                id=feedback_id,
+                session_id=session_id,
+                conversation_id=message.conversation_id,
+                message_id=message_id,
+                stage=FeedbackStage.CHAT.value,
+                outcome=outcome.value,
+                reason=reason.value if reason is not None else None,
+                question=question,
+                question_normalized=normalize_query(question),
+                presented_faq_ids=[],
+                source_urls=source_urls,
+                note=note,
+            )
+        )
+        # Same transaction as the feedback row, so the dashboard and the durable
+        # record can never disagree about what was said.
+        await executor.execute(
+            UsageEvent.__table__.insert().values(
+                event_type=UsageEventType.CHAT_RESOLUTION.value,
+                session_id=session_id,
+                conversation_id=message.conversation_id,
+                question=question,
+                payload={
+                    "outcome": outcome.value,
+                    "reason": reason.value if reason is not None else None,
+                    "message_id": str(message_id),
+                    "source_urls": source_urls,
+                },
+            )
+        )
+    except RescueError:
+        raise
+    except SQLAlchemyError as err:
+        raise RescueError(
+            ErrorCode.INTERNAL_ERROR,
+            detail="database failed while persisting chat feedback",
+        ) from err
+
+    unresolved = outcome is FeedbackOutcome.UNRESOLVED
+    logger.info(
+        "chat answer feedback persisted",
+        extra={
+            "feedback_id": str(feedback_id),
+            "session_id": str(session_id),
+            "message_id": str(message_id),
+            "outcome": outcome.value,
+            "reason": reason.value if reason is not None else None,
+            "cited_page_count": len(source_urls),
+            "documentation_gap": unresolved,
+        },
+    )
+    return FeedbackRecord(
+        feedback_id=feedback_id,
+        outcome=outcome,
+        rescue_tools_available=unresolved,
+    )
+
+
+async def _question_for(executor: Executor, message: Message) -> str:
+    """The user turn this answer replied to.
+
+    Falls back to the conversation's opening question: an answer always has one
+    of the two, and feedback with no question attached cannot be grouped with
+    anything.
+    """
+    asked = (
+        await executor.execute(
+            select(Message.content)
+            .where(
+                Message.conversation_id == message.conversation_id,
+                Message.role == MessageRole.USER.value,
+                Message.ordinal < message.ordinal,
+            )
+            .order_by(Message.ordinal.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if asked:
+        return str(asked)
+    opening = (
+        await executor.execute(
+            select(Conversation.initial_question).where(Conversation.id == message.conversation_id)
+        )
+    ).scalar_one_or_none()
+    return str(opening or "")
+
+
+def _cited_urls(citations: Any) -> list[str]:
+    """Distinct documentation URLs an answer cited, in the order it cited them."""
+    if not isinstance(citations, list):
+        return []
+    urls = [
+        citation["url"]
+        for citation in citations
+        if isinstance(citation, dict) and isinstance(citation.get("url"), str)
+    ]
+    return list(dict.fromkeys(urls))

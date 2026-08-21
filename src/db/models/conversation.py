@@ -12,6 +12,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     JSON,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
@@ -27,6 +28,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.db.models.base import Base, TimestampMixin
 from src.db.models.enums import (
     FeedbackOutcome,
+    FeedbackReason,
     FeedbackStage,
     JobStatus,
     MessageRole,
@@ -73,6 +75,15 @@ class Conversation(Base, TimestampMixin):
     technical_profile: Mapped[dict] = mapped_column(JSONB_, nullable=False, default=dict)
     #: Which rescue tool the user moved to, if any.
     rescue_tool: Mapped[str | None] = mapped_column(String(16), nullable=True)
+
+    #: A running Persian summary of the turns that have fallen out of the
+    #: verbatim history window. This is what lets a conversation continue past
+    #: the old three-turn cutoff without the token cost growing with its length.
+    history_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: The highest message ordinal already folded into `history_summary`. Older
+    #: turns are summarized once and never re-read, so each turn costs at most
+    #: one summarization call.
+    history_summarized_through_ordinal: Mapped[int | None] = mapped_column(Integer, nullable=True)
     last_activity_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -178,6 +189,14 @@ class Feedback(Base, TimestampMixin):
     __table_args__ = (
         enum_check("outcome", FeedbackOutcome, name="outcome"),
         enum_check("stage", FeedbackStage, name="stage"),
+        CheckConstraint(
+            "reason IS NULL OR reason IN ("
+            + ", ".join(f"'{member.value}'" for member in FeedbackReason)
+            + ")",
+            name="reason",
+        ),
+        # The admin console reads chat feedback for a time window on every load.
+        Index("ix_feedback_stage_created_at", "stage", "created_at"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID_, primary_key=True, default=uuid.uuid4)
@@ -197,3 +216,13 @@ class Feedback(Base, TimestampMixin):
     #: The documentation pages implicated, so unresolved feedback aggregates by page.
     source_urls: Mapped[list] = mapped_column(JSONB_, nullable=False, default=list)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    #: The assistant answer being judged, for chat-stage feedback. FAQ-stage
+    #: feedback judges a set of offered entries rather than one message, so this
+    #: stays null there.
+    message_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID_, ForeignKey("messages.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    #: Why the answer fell short, from a fixed set. Free text lives in `note`;
+    #: this is the part that aggregates.
+    reason: Mapped[str | None] = mapped_column(String(32), nullable=True)

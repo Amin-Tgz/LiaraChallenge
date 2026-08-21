@@ -60,6 +60,9 @@ class JobEventType(StrEnum):
 
     #: A job state change, so the UI can name what is happening in plain language.
     STATUS = "status"
+    #: One step the agent took looking for evidence — which tool, what it asked
+    #: for, and what came back. Commentary on the work, never part of the answer.
+    TRACE = "trace"
     #: A chunk of validated answer text.
     DELTA = "delta"
     #: Terminal success: the complete answer plus its citations.

@@ -86,16 +86,24 @@ class Settings(BaseSettings):
     index_retention_count: int = 2
 
     # --- Retrieval ---
-    faq_similarity_threshold: float = 0.4
+    #: Lowered 15% from 0.4 after live use: real questions phrased in the user's
+    #: own words sat just under the old bar and returned nothing, which sends a
+    #: stuck user to the model for something the FAQ already answered.
+    faq_similarity_threshold: float = 0.34
     faq_short_query_max_chars: int = 8
-    faq_short_query_similarity_threshold: float = 0.6
+    #: Same 15% relaxation as above, from 0.6. Still markedly stricter than the
+    #: general threshold, because a two-word query matches almost anything.
+    faq_short_query_similarity_threshold: float = 0.51
     faq_top_k: int = 5
     faq_candidate_multiplier: int = 4
     faq_priority_weight: float = 0.01
     retrieval_top_k: int = 8
     retrieval_candidate_multiplier: int = 3
     retrieval_duplicate_threshold: float = 0.9
-    retrieval_similarity_threshold: float = 0.25
+    #: Lowered 15% from 0.25 alongside the FAQ thresholds. The agent still cites
+    #: only what it retrieves, so a slightly wider net costs recall precision,
+    #: not answer honesty — an irrelevant passage simply goes uncited.
+    retrieval_similarity_threshold: float = 0.2125
     rrf_k: int = 60
     rrf_dense_weight: float = 1.0
     rrf_lexical_weight: float = 1.0
@@ -114,8 +122,22 @@ class Settings(BaseSettings):
     agent_token_budget: int = 32000
     agent_timeout_seconds: float = 60.0
     max_question_chars: int = 2000
+    #: How many recent turns are replayed verbatim. Anything older than this is
+    #: not dropped — it is summarized. See `conversation_summary_*` below.
     max_history_turns: int = 3
-    max_conversation_turns: int = 3
+    #: An abuse ceiling, not a product rule. A conversation is no longer cut off
+    #: at three turns; older turns are summarized instead, so this only exists to
+    #: stop an unbounded thread from growing forever.
+    max_conversation_turns: int = 40
+
+    # --- Conversation summarization ---
+    #: Once a conversation holds more user turns than this, everything outside
+    #: the `max_history_turns` window is folded into a running summary. Invisible
+    #: to the user: they simply keep asking.
+    conversation_summary_trigger_turns: int = 3
+    conversation_summary_model: str = ""
+    conversation_summary_max_tokens: int = 800
+    conversation_summary_timeout_seconds: float = 30.0
 
     # --- Queue, streaming, durability ---
     #: How many times a job may be attempted before it reaches the terminal
@@ -232,11 +254,45 @@ class Settings(BaseSettings):
             raise ValueError("configured counts and generation budgets must be positive")
         return v
 
-    @field_validator("faq_short_query_max_chars", "max_history_turns")
+    @field_validator(
+        "faq_short_query_max_chars",
+        "max_history_turns",
+        "conversation_summary_trigger_turns",
+    )
     @classmethod
     def _non_negative_history_or_short_query_bound(cls, v: int) -> int:
         if v < 0:
             raise ValueError("short-query and history bounds must be non-negative")
+        return v
+
+    @field_validator("conversation_summary_max_tokens")
+    @classmethod
+    def _positive_summary_budget(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("CONVERSATION_SUMMARY_MAX_TOKENS must be positive")
+        return v
+
+    @field_validator("conversation_summary_timeout_seconds")
+    @classmethod
+    def _positive_summary_timeout(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError("CONVERSATION_SUMMARY_TIMEOUT_SECONDS must be positive")
+        return v
+
+    @field_validator("conversation_summary_trigger_turns")
+    @classmethod
+    def _trigger_below_hard_ceiling(cls, v: int, info: ValidationInfo) -> int:
+        # The hard ceiling exists to bound abuse; if it sat at or below the point
+        # where summarization kicks in, summarization could never run and the
+        # conversation would be cut off exactly as it was before. Validated here
+        # rather than on the ceiling because pydantic populates `info.data` in
+        # field-definition order, and the ceiling is declared first.
+        ceiling = info.data.get("max_conversation_turns")
+        if ceiling is not None and v >= ceiling:
+            raise ValueError(
+                "CONVERSATION_SUMMARY_TRIGGER_TURNS must be below MAX_CONVERSATION_TURNS, "
+                "otherwise the ceiling is reached before any history is ever summarized"
+            )
         return v
 
     @field_validator("metrics_path")
@@ -308,6 +364,16 @@ class Settings(BaseSettings):
         if not -1.0 <= v <= 1.0:
             raise ValueError("cosine similarity thresholds must be in [-1, 1]")
         return v
+
+    @property
+    def summary_model(self) -> str:
+        """The model that condenses conversation history.
+
+        Defaults to the chat model rather than requiring its own setting: a
+        deployment that never thinks about summarization still gets a working
+        one, and an operator who wants a cheaper model only sets one variable.
+        """
+        return self.conversation_summary_model or self.llm_model
 
     @property
     def ingest_section_list(self) -> list[str]:

@@ -1,5 +1,4 @@
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import { recallQuestion } from '../flow'
+import { Link, useParams } from 'react-router-dom'
 
 const MCP_URL = 'https://liara-rescue-api.liara.run/mcp'
 
@@ -96,19 +95,14 @@ const MCP_HOSTS: HostGuide[] = [
 
 export default function ToolGuideView() {
   const { tool = '' } = useParams()
-  const navigate = useNavigate()
-  const location = useLocation()
-  const passed = (location.state ?? {}) as { question?: string }
-  const question = passed.question ?? recallQuestion()
-
   if (tool !== 'skill' && tool !== 'mcp') {
     return (
       <main className="shell shell-narrow">
         <section className="state-card">
           <h1>این ابزار وجود ندارد</h1>
-          <button type="button" onClick={() => navigate('/tools', { state: { question } })}>
-            بازگشت به ابزارهای نجات
-          </button>
+          <Link className="button-link" to="/">
+            بازگشت به گفت‌وگو
+          </Link>
         </section>
       </main>
     )
@@ -116,19 +110,7 @@ export default function ToolGuideView() {
 
   return (
     <main className="shell guide-shell">
-      {question && (
-        <p className="original-question">
-          <span className="label">سؤال شما:</span> {question}
-        </p>
-      )}
       {tool === 'skill' ? <SkillGuide /> : <McpGuide />}
-      <button
-        type="button"
-        className="button-secondary"
-        onClick={() => navigate('/tools', { state: { question } })}
-      >
-        بازگشت به ابزارهای نجات
-      </button>
     </main>
   )
 }
@@ -150,6 +132,15 @@ function SkillGuide() {
           دانلود فایل SKILL.md
         </a>
       </section>
+
+      <figure className="guide-illustration">
+        <img
+          src="/images/skill.png"
+          alt="نصب Skill لیارا در یک دستیار کدنویسی"
+          loading="lazy"
+          decoding="async"
+        />
+      </figure>
 
       <section className="guide-panel">
         <h2>نصب دستی</h2>
@@ -190,6 +181,15 @@ function McpGuide() {
         </div>
         <code className="endpoint-chip" dir="ltr">{MCP_URL}</code>
       </section>
+
+      <figure className="guide-illustration">
+        <img
+          src="/images/MCP.png"
+          alt="اتصال سرور MCP لیارا به یک میزبان سازگار"
+          loading="lazy"
+          decoding="async"
+        />
+      </figure>
 
       <section className="host-section" aria-labelledby="host-heading">
         <h2 id="host-heading">برنامهٔ میزبان را انتخاب کنید</h2>

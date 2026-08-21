@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query
@@ -22,8 +23,8 @@ from src.api.admin.auth import AdminUser, require_admin
 from src.core.errors import ErrorCode, RescueError
 from src.core.logging import get_logger
 from src.core.normalization import normalize_query
-from src.db.models import FaqItem, IndexVersion
-from src.db.models.enums import FaqStatus
+from src.db.models import FaqItem, Feedback, IndexVersion, Message
+from src.db.models.enums import FaqStatus, FeedbackOutcome, FeedbackStage
 from src.db.session import get_session
 from src.services.dashboard import DEFAULT_WINDOW_DAYS, build_dashboard
 from src.services.embeddings import EmbeddingClient
@@ -319,6 +320,93 @@ async def get_dashboard(
     """Every figure derived from recorded events, with explicit no-data states."""
     dashboard = await build_dashboard(db, window_days=window_days, top_n=top_n)
     return dashboard.as_dict()
+
+
+# --- Feedback review -------------------------------------------------------
+
+
+class FeedbackEntryOut(BaseModel):
+    id: uuid.UUID
+    created_at: str
+    stage: str
+    outcome: str
+    reason: str | None
+    question: str
+    note: str | None
+    source_urls: list[str]
+    conversation_id: uuid.UUID | None
+    message_id: uuid.UUID | None
+    #: The answer that was judged, for chat-stage rows. Absent for FAQ-stage
+    #: feedback, which judges a set of offered entries rather than one message.
+    answer: str | None
+
+
+class FeedbackPageOut(BaseModel):
+    total: int
+    items: list[FeedbackEntryOut]
+
+
+@router.get("/feedback", response_model=FeedbackPageOut)
+async def list_feedback(
+    db: Db,
+    stage: Annotated[FeedbackStage | None, Query()] = None,
+    outcome: Annotated[FeedbackOutcome | None, Query()] = None,
+    window_days: Annotated[int, Query(ge=1, le=365)] = DEFAULT_WINDOW_DAYS,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> FeedbackPageOut:
+    """Individual verdicts, newest first, with the answer each one judged.
+
+    The dashboard aggregates; this is for reading the actual complaints. An
+    aggregate says "this page produces bad answers" — only the rows say what
+    people were trying to do when it did.
+    """
+    since = datetime.now(UTC) - timedelta(days=window_days)
+    conditions = [Feedback.created_at >= since]
+    if stage is not None:
+        conditions.append(Feedback.stage == stage.value)
+    if outcome is not None:
+        conditions.append(Feedback.outcome == outcome.value)
+
+    try:
+        total = int(
+            (
+                await db.execute(select(func.count(Feedback.id)).where(*conditions))
+            ).scalar_one_or_none()
+            or 0
+        )
+        rows = (
+            await db.execute(
+                select(Feedback, Message.content)
+                .outerjoin(Message, Message.id == Feedback.message_id)
+                .where(*conditions)
+                .order_by(Feedback.created_at.desc())
+                .limit(limit)
+                .offset(offset)
+            )
+        ).all()
+    except SQLAlchemyError as err:
+        raise RescueError(ErrorCode.RETRIEVAL_FAILED, detail="failed to read feedback") from err
+
+    return FeedbackPageOut(
+        total=total,
+        items=[
+            FeedbackEntryOut(
+                id=entry.id,
+                created_at=entry.created_at.isoformat() if entry.created_at else "",
+                stage=entry.stage,
+                outcome=entry.outcome,
+                reason=entry.reason,
+                question=entry.question,
+                note=entry.note,
+                source_urls=[url for url in (entry.source_urls or []) if isinstance(url, str)],
+                conversation_id=entry.conversation_id,
+                message_id=entry.message_id,
+                answer=answer,
+            )
+            for entry, answer in rows
+        ],
+    )
 
 
 # --- Index versions --------------------------------------------------------

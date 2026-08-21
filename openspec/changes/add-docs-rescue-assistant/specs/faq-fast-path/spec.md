@@ -50,7 +50,7 @@ The system SHALL match an incoming question against stored FAQ questions by embe
 #### Scenario: Weak match suppressed
 
 - **WHEN** no stored question exceeds the threshold
-- **THEN** no FAQ results are shown, and the user is told nothing relevant was found and offered the rescue tools
+- **THEN** no FAQ results are shown, and the question is taken to the assistant directly rather than stopping at an empty result
 
 #### Scenario: Threshold is configurable at runtime
 
@@ -107,3 +107,18 @@ Until behavioral popularity data exists, the interface SHALL present these entri
 
 - **WHEN** FAQ results are displayed
 - **THEN** they are labeled as related questions
+
+### Requirement: Every search is recorded, including one that matched nothing
+
+The system SHALL record one usage event per FAQ search carrying the number of results and the threshold in force, independently of the per-entry impression signals. Failing to record it SHALL NOT fail the search.
+
+#### Scenario: A search matching nothing is still counted
+
+- **WHEN** a search returns no result above the threshold
+- **THEN** an event recording zero results and the threshold in force is written, so the share of searches that returned anything is measurable
+
+#### Scenario: Analytics never costs a result
+
+- **WHEN** recording the search fails
+- **THEN** the search results are returned unaffected and the failure is logged
+

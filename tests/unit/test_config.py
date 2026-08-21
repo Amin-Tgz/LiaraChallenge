@@ -151,3 +151,48 @@ def test_liara_database_url_rejects_a_non_postgres_url_naming_its_own_field() ->
     # operator at the wrong variable during a deploy is its own outage.
     with pytest.raises(ValueError, match="LIARA_DATABASE_URL"):
         _settings(liara_database_url="mysql://root:pw@liaradb:3306/postgres")
+
+
+def test_summary_trigger_must_stay_below_the_hard_ceiling() -> None:
+    # A ceiling at or below the trigger means summarization can never run and
+    # the conversation is cut off exactly as it was before this feature existed.
+    with pytest.raises(ValueError, match="below MAX_CONVERSATION_TURNS"):
+        _settings(max_conversation_turns=3, conversation_summary_trigger_turns=3)
+
+
+def test_summary_trigger_below_the_ceiling_is_accepted() -> None:
+    settings = _settings(max_conversation_turns=40, conversation_summary_trigger_turns=3)
+    assert settings.conversation_summary_trigger_turns == 3
+    assert settings.max_conversation_turns == 40
+
+
+def test_conversation_ceiling_is_an_abuse_bound_not_a_three_turn_product_rule() -> None:
+    # Guards the regression this change exists to prevent: a default of 3 here
+    # is the old cut-off, not a ceiling.
+    assert _settings().max_conversation_turns > _settings().conversation_summary_trigger_turns
+
+
+def test_summary_budget_and_timeout_must_be_positive() -> None:
+    with pytest.raises(ValueError, match="CONVERSATION_SUMMARY_MAX_TOKENS"):
+        _settings(conversation_summary_max_tokens=0)
+    with pytest.raises(ValueError, match="CONVERSATION_SUMMARY_TIMEOUT_SECONDS"):
+        _settings(conversation_summary_timeout_seconds=0)
+
+
+def test_summary_model_falls_back_to_the_chat_model() -> None:
+    assert _settings(llm_model="chat-model").summary_model == "chat-model"
+    assert (
+        _settings(llm_model="chat-model", conversation_summary_model="cheap").summary_model
+        == "cheap"
+    )
+
+
+def test_similarity_thresholds_carry_the_relaxed_defaults() -> None:
+    # Lowered 15% from 0.4/0.6/0.25 so questions phrased in a user's own words
+    # stop falling just under the bar.
+    settings = _settings()
+    assert settings.faq_similarity_threshold == pytest.approx(0.34)
+    assert settings.faq_short_query_similarity_threshold == pytest.approx(0.51)
+    assert settings.retrieval_similarity_threshold == pytest.approx(0.2125)
+    # The short-query bar stays strictly higher: two words match almost anything.
+    assert settings.faq_short_query_similarity_threshold > settings.faq_similarity_threshold

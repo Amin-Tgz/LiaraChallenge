@@ -134,3 +134,56 @@ The system SHALL treat retrieved documentation as untrusted data. Instructions e
 
 - **WHEN** retrieved content contains text resembling instructions to the model
 - **THEN** the agent does not follow them and answers the user's original question
+
+### Requirement: History summarized rather than truncated
+
+Conversation turns beyond the configured verbatim window SHALL be condensed into a running summary supplied to the agent as context. Each turn SHALL be summarized at most once. A summarization failure SHALL degrade to the raw recent history and SHALL NOT fail the turn. The summary SHALL be supplied with an explicit boundary marking it as data rather than instruction.
+
+#### Scenario: Older turns become a summary
+
+- **WHEN** a conversation exceeds the configured trigger and turns fall outside the verbatim window
+- **THEN** those turns are represented to the agent by a summary and the recent turns are still supplied verbatim
+
+#### Scenario: Summarization is incremental
+
+- **WHEN** a further turn falls outside the window on a later request
+- **THEN** only the newly excluded turns are summarized, on top of the existing summary
+
+#### Scenario: Failure costs context, not the answer
+
+- **WHEN** the summarization call fails or times out
+- **THEN** the turn proceeds using the raw recent history and the failure is recorded
+
+### Requirement: Observable search steps
+
+While a job runs, the system SHALL publish each documentation search the agent performs — the tool, the query as written, the number of results, and the highest similarity when the tool measured one — on the same relay the answer streams over. Publishing SHALL NOT be able to fail the job, and a step that did not happen SHALL NOT be reported.
+
+#### Scenario: A search step is published as it happens
+
+- **WHEN** the agent completes a tool call
+- **THEN** an event naming the tool, the query, and what came back is published to the job's stream
+
+#### Scenario: Unmeasured similarity is reported as absent
+
+- **WHEN** a tool returns results without a similarity score
+- **THEN** the step reports no similarity rather than a zero
+
+#### Scenario: A broken relay does not break the answer
+
+- **WHEN** publishing a step fails
+- **THEN** the failure is recorded and the turn completes normally
+
+### Requirement: Answer feedback joined to its evidence
+
+The system SHALL accept a verdict on a specific assistant answer and SHALL derive the question and the documentation pages implicated from that answer's own record rather than from the submitting client. A verdict on a message that is not an assistant answer belonging to the requesting session SHALL be refused identically to one naming a message that does not exist.
+
+#### Scenario: Cited pages come from the answer
+
+- **WHEN** a verdict is recorded on an answer
+- **THEN** the stored record carries the answer's citations as the implicated pages and the question it replied to, neither of them supplied by the client
+
+#### Scenario: A foreign or non-answer message is refused
+
+- **WHEN** a verdict names a message belonging to another session, or a message that is not an assistant answer
+- **THEN** it is refused with the same response as one naming an unknown message
+

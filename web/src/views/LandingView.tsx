@@ -1,26 +1,100 @@
-import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { ApiError, listConversations, searchFaq } from '../api/client'
-import type { ConversationSummary } from '../api/types'
+/**
+ * The first screen, which is now the conversation itself.
+ *
+ * The rescue flow used to spend three navigations getting to an answer: a form,
+ * a related-questions page, a tool-choice page, then the chat. Every one of
+ * those was a place to lose someone who was already stuck. The whole path now
+ * happens here without changing route — ask, see whether the documentation
+ * already answers it, and continue into chat only if it does not.
+ *
+ * The one model call is still gated behind the user's own judgement: nothing is
+ * generated until they say the FAQ did not help.
+ */
+
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
-  forgetNextQuestion,
-  recallNextQuestion,
-  rememberQuestion,
-} from '../flow'
+  ApiError,
+  fireAndForget,
+  getSessionId,
+  newIdempotencyKey,
+  recordFeedback,
+  recordInteraction,
+  searchFaq,
+  startConversation,
+} from '../api/client'
+import type { FaqResult } from '../api/types'
+import { FaqGate } from '../components/FaqGate'
 import { submitTextareaOnEnter } from '../keyboard'
 
-export default function LandingView() {
+/** Concrete enough to be worth clicking, and all answerable from the corpus. */
+const EXAMPLES = [
+  'چطور یک برنامهٔ Django را روی لیارا مستقر کنم؟',
+  'برای دامنهٔ اختصاصی چه رکوردی باید بسازم و SSL چطور فعال می‌شود؟',
+  'لاگ‌های برنامه‌ام را از چه راهی ببینم؟',
+]
+
+type Stage =
+  | { kind: 'idle' }
+  | { kind: 'searching'; question: string }
+  | { kind: 'gate'; question: string; results: FaqResult[] }
+  | { kind: 'resolved' }
+
+export default function LandingView({ onConversationsChanged }: { onConversationsChanged: () => void }) {
   const navigate = useNavigate()
-  const carriedDraft = recallNextQuestion()
-  const [question, setQuestion] = useState(carriedDraft)
+  const [question, setQuestion] = useState('')
+  const [stage, setStage] = useState<Stage>({ kind: 'idle' })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [history, setHistory] = useState<ConversationSummary[]>([])
 
-  useEffect(() => {
-    if (carriedDraft) forgetNextQuestion()
-    listConversations().then(setHistory).catch(() => setHistory([]))
-  }, [carriedDraft])
+  function fail(cause: unknown) {
+    setError(
+      cause instanceof ApiError
+        ? cause.message
+        : 'ارتباط با سرویس برقرار نشد. اتصال شبکه را بررسی کنید.',
+    )
+  }
+
+  /** Hand the question to the assistant and follow it into the conversation. */
+  async function toChat(text: string, presentedFaqIds: string[]) {
+    setBusy(true)
+    setError(null)
+    try {
+      // Telemetry rides alongside; it is never allowed to hold up the answer.
+      void getSessionId()
+        .then(({ session_id }) => {
+          if (presentedFaqIds.length > 0) {
+            fireAndForget(
+              recordFeedback({
+                session_id,
+                question: text,
+                outcome: 'unresolved',
+                presented_faq_ids: presentedFaqIds,
+              }),
+            )
+          }
+          fireAndForget(
+            recordInteraction({
+              event_type: 'rescue_tool_transition',
+              session_id,
+              question: text,
+              rescue_tool: 'chat',
+            }),
+          )
+        })
+        .catch(() => undefined)
+
+      const response = await startConversation(text, newIdempotencyKey())
+      onConversationsChanged()
+      navigate('/chat/' + response.conversation_id, {
+        state: { jobId: response.job.id },
+      })
+    } catch (cause) {
+      fail(cause)
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
@@ -29,125 +103,168 @@ export default function LandingView() {
 
     setBusy(true)
     setError(null)
+    setStage({ kind: 'searching', question: text })
     try {
-      const results = await searchFaq(text)
-      rememberQuestion(text)
-      navigate('/related', { state: { question: text, results } })
+      const found = await searchFaq(text)
+      if (found.results.length === 0) {
+        // Nothing to offer and nothing to ask about — going straight to the
+        // assistant is the only useful thing left to do.
+        setStage({ kind: 'idle' })
+        setQuestion('')
+        await toChat(text, [])
+        return
+      }
+      setStage({ kind: 'gate', question: text, results: found.results })
+      setQuestion('')
+      void getSessionId()
+        .then(({ session_id }) =>
+          fireAndForget(
+            recordInteraction({
+              event_type: 'faq_impression',
+              session_id,
+              question: text,
+              faq_item_ids: found.results.map((result) => result.faq_item_id),
+            }),
+          ),
+        )
+        .catch(() => undefined)
     } catch (cause) {
-      setError(
-        cause instanceof ApiError
-          ? cause.message
-          : 'ارتباط با سرویس برقرار نشد. اتصال شبکه را بررسی کنید.',
-      )
+      setStage({ kind: 'idle' })
+      fail(cause)
     } finally {
       setBusy(false)
     }
   }
 
-  return (
-    <main className="shell landing-shell">
-      <section className="hero">
-        <div className="hero-copy">
-          <span className="eyebrow">راهنمای مبتنی بر مستندات رسمی</span>
-          <h1>وقتی در مستندات لیارا گیر می‌کنید، مسیر بعدی را پیدا کنید.</h1>
-          <p className="lead">
-            خطا، کاری که انجام داده‌اید و نتیجهٔ مورد انتظار را بنویسید. ابتدا میان
-            پرسش‌های مستند جست‌وجو می‌کنیم؛ اگر کافی نبود، ابزارهای نجات آماده‌اند.
-          </p>
-          <ul className="trust-list" aria-label="ویژگی‌های پاسخ">
-            <li><CheckIcon /> ارجاع مستقیم به مستندات</li>
-            <li><CheckIcon /> پرهیز از پاسخ بدون شاهد</li>
-            <li><CheckIcon /> حفظ پرسش در تمام مسیر</li>
-          </ul>
-          <figure className="hero-visual">
-            <img
-              src="/images/stopped.png"
-              alt="آهویی که در برف متوقف شده است"
-              data-testid="stopped-illustration"
-              decoding="async"
-            />
-            <figcaption>
-              <strong>مثل آهو توی برف گیر کردی؟</strong>
-              <span>سؤالت را بنویس؛ راه خروج را از دل مستندات پیدا می‌کنیم.</span>
-            </figcaption>
-          </figure>
-        </div>
+  function markResolved(text: string, results: FaqResult[]) {
+    void getSessionId()
+      .then(({ session_id }) =>
+        fireAndForget(
+          recordFeedback({
+            session_id,
+            question: text,
+            outcome: 'resolved',
+            presented_faq_ids: results.map((result) => result.faq_item_id),
+          }),
+        ),
+      )
+      .catch(() => undefined)
+    setStage({ kind: 'resolved' })
+  }
 
-        <form onSubmit={submit} className="question-card">
-          {carriedDraft && (
-            <p className="handoff-note" role="status">
-              این پرسش از گفت‌وگوی قبلی به یک جست‌وجوی تازه منتقل شد.
+  const asked = stage.kind === 'searching' || stage.kind === 'gate' ? stage.question : null
+
+  return (
+    <main className="chat-surface">
+      <div className="chat-scroll">
+        {stage.kind === 'idle' && (
+          <section className="composer-intro">
+            <img className="intro-logo" src="/images/logoLiara.png" alt="لیارا" />
+            <h1>در مستندات لیارا گیر کرده‌اید؟</h1>
+            <p className="lead">
+              خطا، کاری که انجام داده‌اید و نتیجهٔ مورد انتظار را بنویسید. اول میان
+              پرسش‌های مستند می‌گردیم؛ اگر کافی نبود، دستیار با ارجاع به مستندات پاسخ
+              می‌دهد.
             </p>
-          )}
-          <label htmlFor="question">سؤال شما</label>
-          <p id="question-hint" className="field-hint">
-            پیام خطا را عیناً وارد کنید. Enter برای جست‌وجو و Shift+Enter برای خط جدید.
+            <ul className="example-questions" aria-label="نمونهٔ پرسش‌ها">
+              {EXAMPLES.map((example) => (
+                <li key={example}>
+                  <button type="button" onClick={() => setQuestion(example)}>
+                    {example}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {asked && (
+          <div className="turn turn-user standalone-turn">
+            <p className="user-text">{asked}</p>
+          </div>
+        )}
+
+        {stage.kind === 'searching' && (
+          <p className="searching-note" role="status">
+            در حال جست‌وجو میان پرسش‌های مستند…
           </p>
-          <textarea
-            id="question"
-            name="question"
-            rows={7}
-            value={question}
-            onChange={(event) => setQuestion(event.target.value)}
-            onKeyDown={submitTextareaOnEnter}
-            aria-describedby="question-hint"
-            placeholder="مثلاً: هنگام استقرار برنامهٔ Django با liara deploy خطای پورت می‌گیرم…"
-            autoFocus={Boolean(carriedDraft)}
-            required
+        )}
+
+        {stage.kind === 'gate' && (
+          <FaqGate
+            question={stage.question}
+            results={stage.results}
+            busy={busy}
+            onResolved={() => markResolved(stage.question, stage.results)}
+            onUnresolved={() =>
+              void toChat(
+                stage.question,
+                stage.results.map((result) => result.faq_item_id),
+              )
+            }
           />
-          <div className="form-footer">
-            <span className="keyboard-hint" aria-hidden="true">Enter ↵</span>
-            <button type="submit" disabled={busy || question.trim().length === 0}>
-              {busy ? 'در حال جست‌وجو…' : 'پیدا کردن پاسخ'}
-              {!busy && <ArrowIcon />}
+        )}
+
+        {stage.kind === 'resolved' && (
+          <section className="state-card success-card">
+            <span className="eyebrow">بازخورد ثبت شد</span>
+            <h1>خوشحالیم که مشکل حل شد</h1>
+            <p className="lead">
+              بازخورد شما ترتیب پرسش‌های مرتبط را بهتر می‌کند و شکاف‌های مستندات را
+              آشکار می‌سازد.
+            </p>
+            <button type="button" onClick={() => setStage({ kind: 'idle' })}>
+              پرسش تازه
+            </button>
+          </section>
+        )}
+
+        {error && (
+          <p role="alert" className="job-error">
+            {error}
+          </p>
+        )}
+      </div>
+
+      {stage.kind !== 'gate' && stage.kind !== 'resolved' && (
+        <form onSubmit={submit} className="composer">
+          <label className="visually-hidden" htmlFor="question">
+            سؤال شما
+          </label>
+          <div className="composer-box">
+            <textarea
+              id="question"
+              name="question"
+              rows={1}
+              value={question}
+              onChange={(event) => setQuestion(event.target.value)}
+              onKeyDown={submitTextareaOnEnter}
+              aria-describedby="question-hint"
+              placeholder="مثلاً: هنگام استقرار برنامهٔ Django با liara deploy خطای پورت می‌گیرم…"
+              required
+            />
+            <button
+              type="submit"
+              className="send-button"
+              disabled={busy || question.trim().length === 0}
+              aria-label="ارسال سؤال"
+            >
+              <SendIcon />
             </button>
           </div>
-          {error && <p role="alert" className="job-error">{error}</p>}
+          <p id="question-hint" className="field-hint">
+            پیام خطا را عیناً وارد کنید. Enter برای ارسال و Shift+Enter برای خط جدید.
+          </p>
         </form>
-      </section>
-
-      <section className="path-strip" aria-label="مسیر پاسخ‌گویی">
-        <div><span>۱</span><strong>جست‌وجوی سریع</strong><small>میان پرسش‌های مستند</small></div>
-        <div><span>۲</span><strong>بررسی منبع</strong><small>با لینک و بخش دقیق</small></div>
-        <div><span>۳</span><strong>ابزار نجات</strong><small>گفت‌وگو، Skill یا MCP</small></div>
-      </section>
-
-      {history.length > 0 && (
-        <section aria-labelledby="history-heading" className="history section-block">
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">ادامه از جایی که بودید</span>
-              <h2 id="history-heading">گفت‌وگوهای پیشین شما</h2>
-            </div>
-          </div>
-          <ul className="history-grid">
-            {history.map((conversation) => (
-              <li key={conversation.id}>
-                <Link to={'/chat/' + conversation.id}>
-                  <span>{conversation.title ?? conversation.initial_question}</span>
-                  <small>{conversation.message_count} پیام</small>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
       )}
     </main>
   )
 }
 
-function CheckIcon() {
+function SendIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="m5 12 4 4L19 6" />
-    </svg>
-  )
-}
-
-function ArrowIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M19 12H5M11 18l-6-6 6-6" />
+      <path d="M20 12 4 4l3 8-3 8 16-8Z" />
     </svg>
   )
 }

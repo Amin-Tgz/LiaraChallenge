@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import Select, func, select, true
+from sqlalchemy import Integer, Select, func, select, true
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 
@@ -26,6 +26,8 @@ from src.core.errors import ErrorCode, RescueError
 from src.core.logging import get_logger
 from src.db.models import FaqItem, IndexVersion, UsageEvent
 from src.db.models.enums import FeedbackOutcome, UsageEventType
+from src.services.interactions import NORMALIZED_QUESTION_KEY as _NORMALIZED_QUESTION_KEY
+from src.services.interactions import SEARCH_MARKER as _SEARCH_MARKER
 
 logger = get_logger(__name__)
 Executor = AsyncSession | AsyncConnection
@@ -77,6 +79,15 @@ class Dashboard:
     provider_fallbacks: Metric = field(default_factory=Metric.absent)
     active_index: Metric = field(default_factory=Metric.absent)
     faq_corpus: Metric = field(default_factory=Metric.absent)
+    # Answer quality and demand, from chat-stage feedback and usage.
+    chat_satisfaction_rate: Metric = field(default_factory=Metric.absent)
+    lowest_rated_pages: Metric = field(default_factory=Metric.absent)
+    feedback_reasons: Metric = field(default_factory=Metric.absent)
+    top_questions: Metric = field(default_factory=Metric.absent)
+    top_cited_pages: Metric = field(default_factory=Metric.absent)
+    questions_over_time: Metric = field(default_factory=Metric.absent)
+    abstention_rate: Metric = field(default_factory=Metric.absent)
+    faq_hit_rate: Metric = field(default_factory=Metric.absent)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -93,6 +104,14 @@ class Dashboard:
                 "provider_fallbacks": self.provider_fallbacks.as_dict(),
                 "active_index": self.active_index.as_dict(),
                 "faq_corpus": self.faq_corpus.as_dict(),
+                "chat_satisfaction_rate": self.chat_satisfaction_rate.as_dict(),
+                "lowest_rated_pages": self.lowest_rated_pages.as_dict(),
+                "feedback_reasons": self.feedback_reasons.as_dict(),
+                "top_questions": self.top_questions.as_dict(),
+                "top_cited_pages": self.top_cited_pages.as_dict(),
+                "questions_over_time": self.questions_over_time.as_dict(),
+                "abstention_rate": self.abstention_rate.as_dict(),
+                "faq_hit_rate": self.faq_hit_rate.as_dict(),
             },
         }
 
@@ -387,6 +406,258 @@ async def _faq_corpus(executor: Executor) -> Metric:
     )
 
 
+async def _chat_satisfaction_rate(executor: Executor, since: datetime) -> Metric:
+    """Share of answers the user judged helpful.
+
+    Deliberately not comparable to `faq_resolution_rate`: that one measures
+    whether a canned entry matched, this one measures whether a generated answer
+    was any good. Both are opt-in, so both under-count silence rather than
+    guessing at it.
+    """
+    rows = (
+        await executor.execute(
+            _within(
+                select(
+                    func.count().label("total"),
+                    func.count()
+                    .filter(UsageEvent.payload["outcome"].astext == FeedbackOutcome.RESOLVED.value)
+                    .label("resolved"),
+                ).where(UsageEvent.event_type == UsageEventType.CHAT_RESOLUTION.value),
+                since,
+            )
+        )
+    ).one()
+    total, resolved = int(rows.total or 0), int(rows.resolved or 0)
+    if total == 0:
+        return Metric.absent(unit="ratio")
+    return Metric(value=round(resolved / total, 4), sample_size=total, unit="ratio")
+
+
+async def _lowest_rated_pages(executor: Executor, since: datetime, limit: int) -> Metric:
+    """Documentation pages whose citations keep producing rejected answers.
+
+    This is the operational point of chat feedback. A page that repeatedly backs
+    an answer the user rejects is either wrong, incomplete, or chunked so that
+    its useful part never survives retrieval — and this list is the only place
+    that shows up.
+    """
+    elements = (
+        func.jsonb_array_elements_text(UsageEvent.payload["source_urls"])
+        .table_valued("value")
+        .lateral("page")
+    )
+    rows = await executor.execute(
+        _within(
+            select(elements.c.value.label("source_url"), func.count().label("count"))
+            .select_from(UsageEvent)
+            .join(elements, true())
+            .where(
+                UsageEvent.event_type == UsageEventType.CHAT_RESOLUTION.value,
+                UsageEvent.payload["outcome"].astext == FeedbackOutcome.UNRESOLVED.value,
+                # Same guard as `_unresolved_pages`: one malformed payload must
+                # not take the whole dashboard down.
+                func.jsonb_typeof(UsageEvent.payload["source_urls"]) == "array",
+            )
+            .group_by(elements.c.value)
+            .order_by(func.count().desc())
+            .limit(limit),
+            since,
+        )
+    )
+    items = [{"source_url": url, "count": int(count)} for url, count in rows]
+    if not items:
+        return Metric.absent(unit="pages")
+    return Metric(value=items, sample_size=sum(item["count"] for item in items), unit="pages")
+
+
+async def _feedback_reasons(executor: Executor, since: datetime) -> Metric:
+    """What kind of wrong the rejected answers were.
+
+    "Incomplete" points at the corpus, "irrelevant" at retrieval, "incorrect" at
+    grounding. Without the split, a falling satisfaction rate says only that
+    something got worse.
+    """
+    rows = await executor.execute(
+        _within(
+            select(
+                UsageEvent.payload["reason"].astext.label("reason"),
+                func.count().label("count"),
+            )
+            .where(
+                UsageEvent.event_type == UsageEventType.CHAT_RESOLUTION.value,
+                UsageEvent.payload["outcome"].astext == FeedbackOutcome.UNRESOLVED.value,
+            )
+            .group_by(UsageEvent.payload["reason"].astext),
+            since,
+        )
+    )
+    counts = {(reason or "unspecified"): int(count) for reason, count in rows}
+    total = sum(counts.values())
+    if total == 0:
+        return Metric.absent(unit="reports")
+    return Metric(
+        value={
+            reason: {"count": count, "share": round(count / total, 4)}
+            for reason, count in sorted(counts.items(), key=lambda item: -item[1])
+        },
+        sample_size=total,
+        unit="reports",
+    )
+
+
+async def _top_questions(executor: Executor, since: datetime, limit: int) -> Metric:
+    """What people actually ask, answered or not.
+
+    `unresolved_questions` is a backlog of failures; this is demand. A question
+    that is asked constantly and answered well is still the strongest argument
+    for where the documentation deserves attention.
+
+    Counted over search rows, not impression rows: an impression is written per
+    entry shown, so counting those would rank a question by how many results it
+    happened to return rather than by how often it was asked. Grouped on the
+    normalized form so two spellings of one question are one row.
+    """
+    normalized = UsageEvent.payload[_NORMALIZED_QUESTION_KEY].astext.label("question")
+    rows = await executor.execute(
+        _within(
+            select(
+                normalized,
+                func.min(UsageEvent.question).label("sample"),
+                func.count().label("count"),
+            )
+            .where(
+                UsageEvent.event_type == UsageEventType.FAQ_IMPRESSION.value,
+                UsageEvent.payload.has_key(_SEARCH_MARKER),
+                UsageEvent.payload[_NORMALIZED_QUESTION_KEY].astext.is_not(None),
+            )
+            .group_by(normalized)
+            .order_by(func.count().desc())
+            .limit(limit),
+            since,
+        )
+    )
+    items = [
+        {"question": sample or question, "count": int(count)} for question, sample, count in rows
+    ]
+    if not items:
+        return Metric.absent(unit="questions")
+    return Metric(value=items, sample_size=sum(item["count"] for item in items), unit="questions")
+
+
+async def _top_cited_pages(executor: Executor, since: datetime, limit: int) -> Metric:
+    """Which parts of the documentation the answers keep leaning on.
+
+    Read alongside `lowest_rated_pages`: heavy use plus poor ratings is the
+    worst combination on the dashboard, and neither number says it alone.
+    """
+    elements = (
+        func.jsonb_array_elements_text(UsageEvent.payload["source_urls"])
+        .table_valued("value")
+        .lateral("page")
+    )
+    rows = await executor.execute(
+        _within(
+            select(elements.c.value.label("source_url"), func.count().label("count"))
+            .select_from(UsageEvent)
+            .join(elements, true())
+            .where(
+                UsageEvent.event_type.in_(
+                    (
+                        UsageEventType.CHAT_RESOLUTION.value,
+                        UsageEventType.FAQ_RESOLUTION.value,
+                    )
+                ),
+                func.jsonb_typeof(UsageEvent.payload["source_urls"]) == "array",
+            )
+            .group_by(elements.c.value)
+            .order_by(func.count().desc())
+            .limit(limit),
+            since,
+        )
+    )
+    items = [{"source_url": url, "count": int(count)} for url, count in rows]
+    if not items:
+        return Metric.absent(unit="pages")
+    return Metric(value=items, sample_size=sum(item["count"] for item in items), unit="pages")
+
+
+async def _questions_over_time(executor: Executor, since: datetime) -> Metric:
+    """Daily question volume, oldest first.
+
+    Days with no traffic are absent rather than zero-filled: this module does
+    not manufacture data points, and a gap is legible as a gap.
+    """
+    day = func.date_trunc("day", UsageEvent.created_at).label("day")
+    rows = await executor.execute(
+        _within(
+            select(day, func.count().label("count"))
+            .where(UsageEvent.event_type == UsageEventType.GENERATION.value)
+            .group_by(day)
+            .order_by(day),
+            since,
+        )
+    )
+    items = [{"day": moment.date().isoformat(), "count": int(count)} for moment, count in rows]
+    if not items:
+        return Metric.absent(unit="questions")
+    return Metric(value=items, sample_size=sum(item["count"] for item in items), unit="questions")
+
+
+async def _abstention_rate(executor: Executor, since: datetime) -> Metric:
+    """Share of answered turns that honestly declined to answer.
+
+    Not a failure rate. A rising figure means the corpus is missing what people
+    ask; a figure near zero on a corpus known to have gaps means the agent is
+    answering things it should not.
+    """
+    rows = (
+        await executor.execute(
+            _within(
+                select(
+                    func.count().label("total"),
+                    func.count()
+                    .filter(UsageEvent.error_code == ErrorCode.NO_EVIDENCE.value)
+                    .label("abstained"),
+                ).where(UsageEvent.event_type == UsageEventType.JOB_OUTCOME.value),
+                since,
+            )
+        )
+    ).one()
+    total, abstained = int(rows.total or 0), int(rows.abstained or 0)
+    if total == 0:
+        return Metric.absent(unit="ratio")
+    return Metric(value=round(abstained / total, 4), sample_size=total, unit="ratio")
+
+
+async def _faq_hit_rate(executor: Executor, since: datetime) -> Metric:
+    """Share of FAQ searches that returned anything at all above the threshold.
+
+    The number to watch after moving `faq_similarity_threshold`: it says whether
+    a change let more real questions through, which the resolution rate alone
+    cannot, since a search that matched nothing never gets rated.
+    """
+    rows = (
+        await executor.execute(
+            _within(
+                select(
+                    func.count().label("total"),
+                    func.count()
+                    .filter(UsageEvent.payload[_SEARCH_MARKER].astext.cast(Integer) > 0)
+                    .label("hits"),
+                ).where(
+                    UsageEvent.event_type == UsageEventType.FAQ_IMPRESSION.value,
+                    UsageEvent.payload.has_key(_SEARCH_MARKER),
+                ),
+                since,
+            )
+        )
+    ).one()
+    total, hits = int(rows.total or 0), int(rows.hits or 0)
+    if total == 0:
+        return Metric.absent(unit="ratio")
+    return Metric(value=round(hits / total, 4), sample_size=total, unit="ratio")
+
+
 async def build_dashboard(
     executor: Executor,
     *,
@@ -406,6 +677,14 @@ async def build_dashboard(
         dashboard.provider_fallbacks = await _provider_fallbacks(executor, since)
         dashboard.active_index = await _active_index(executor)
         dashboard.faq_corpus = await _faq_corpus(executor)
+        dashboard.chat_satisfaction_rate = await _chat_satisfaction_rate(executor, since)
+        dashboard.lowest_rated_pages = await _lowest_rated_pages(executor, since, top_n)
+        dashboard.feedback_reasons = await _feedback_reasons(executor, since)
+        dashboard.top_questions = await _top_questions(executor, since, top_n)
+        dashboard.top_cited_pages = await _top_cited_pages(executor, since, top_n)
+        dashboard.questions_over_time = await _questions_over_time(executor, since)
+        dashboard.abstention_rate = await _abstention_rate(executor, since)
+        dashboard.faq_hit_rate = await _faq_hit_rate(executor, since)
     except SQLAlchemyError as err:
         # A dashboard that renders zeros because its query failed is worse than
         # one that does not render. Name the cause.

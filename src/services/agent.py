@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Mapping, Sequence
+import time
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -23,6 +24,10 @@ from src.services.technical_profile import update_conversation_technical_profile
 
 logger = get_logger(__name__)
 Executor = AsyncSession | AsyncConnection
+
+#: Where the agent reports what it is doing while it does it. Optional by
+#: design: the loop's behavior must not depend on anyone watching.
+TraceSink = Callable[[Mapping[str, Any]], Awaitable[None]]
 
 AGENT_SYSTEM_PROMPT = """You are the Liara documentation rescue assistant.
 Answer the user's original question in Persian using only evidence returned by the three
@@ -125,6 +130,76 @@ def _call_parts(call: Mapping[str, Any]) -> tuple[str, str, str]:
             detail="model returned malformed tool call",
         ) from err
     return call_id, name, arguments
+
+
+def _raw_tool_query(arguments: str) -> str | None:
+    """The query as the model wrote it, for display rather than deduplication."""
+    try:
+        raw = json.loads(arguments)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(raw, dict):
+        return None
+    for field in ("query", "url", "symptom"):
+        value = raw.get(field)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _result_shape(output: Any) -> tuple[int, float | None]:
+    """How many results a tool returned and the best similarity among them.
+
+    Reported to the user as the agent works. Both are read defensively: a tool
+    whose payload shape changes should cost a progress line, not a turn.
+    """
+    items = output if isinstance(output, list) else [output]
+    similarities = [
+        float(item["similarity"])
+        for item in items
+        if isinstance(item, dict) and isinstance(item.get("similarity"), int | float)
+    ]
+    return len(items), max(similarities) if similarities else None
+
+
+class _Tracer:
+    """Numbers the agent's search steps and forwards them, if anyone is listening.
+
+    Holding the step counter here keeps `_run` free of bookkeeping, and makes
+    "no sink configured" a single check in one place rather than at every call
+    site.
+    """
+
+    __slots__ = ("_sink", "_step", "_started")
+
+    def __init__(self, sink: TraceSink | None) -> None:
+        self._sink = sink
+        self._step = 0
+        self._started = time.perf_counter()
+
+    async def emit(
+        self,
+        *,
+        tool: str,
+        query: str | None = None,
+        result_count: int | None = None,
+        top_similarity: float | None = None,
+        status: str = "ok",
+    ) -> None:
+        if self._sink is None:
+            return
+        self._step += 1
+        await self._sink(
+            {
+                "step": self._step,
+                "tool": tool,
+                "query": query,
+                "result_count": result_count,
+                "top_similarity": top_similarity,
+                "status": status,
+                "elapsed_ms": int((time.perf_counter() - self._started) * 1000),
+            }
+        )
 
 
 def _normalized_tool_query(arguments: str) -> str | None:
@@ -439,7 +514,9 @@ class BoundedAgent:
         question: str,
         messages: Sequence[Mapping[str, Any]],
         telemetry: GatewayTelemetry,
+        on_trace: TraceSink | None = None,
     ) -> AgentTurnResult:
+        trace = _Tracer(on_trace)
         conversation = [{"role": "system", "content": AGENT_SYSTEM_PROMPT}]
         conversation.extend(dict(message) for message in messages)
         if not messages:
@@ -625,6 +702,7 @@ class BoundedAgent:
                     continue
                 if tool_calls_used >= self.settings.agent_max_tool_calls:
                     limit_reason = "tool_calls"
+                    await trace.emit(tool=name, query=_raw_tool_query(arguments), status="limit")
                     conversation.append(
                         {
                             "role": "tool",
@@ -643,6 +721,11 @@ class BoundedAgent:
                 if query and query not in query_forms:
                     if rewrites_used >= self.settings.agent_max_rewrites:
                         limit_reason = "rewrites"
+                        await trace.emit(
+                            tool=name,
+                            query=_raw_tool_query(arguments),
+                            status="limit",
+                        )
                         conversation.append(
                             {
                                 "role": "tool",
@@ -657,6 +740,13 @@ class BoundedAgent:
                 output = await self.tools.execute(name, arguments)
                 _collect_evidence(output, evidence, evidence_metadata, evidence_images)
                 tool_calls_used += 1
+                found, best = _result_shape(output)
+                await trace.emit(
+                    tool=name,
+                    query=_raw_tool_query(arguments),
+                    result_count=found,
+                    top_similarity=best,
+                )
                 conversation.append(
                     {
                         "role": "tool",
@@ -681,6 +771,7 @@ class BoundedAgent:
         question: str,
         messages: Sequence[Mapping[str, Any]] = (),
         telemetry: GatewayTelemetry | None = None,
+        on_trace: TraceSink | None = None,
     ) -> AgentTurnResult:
         """Run one turn inside the configured wall-clock deadline."""
         telemetry = telemetry or GatewayTelemetry(question=question)
@@ -691,6 +782,7 @@ class BoundedAgent:
                     question=question,
                     messages=messages,
                     telemetry=telemetry,
+                    on_trace=on_trace,
                 )
         except TimeoutError as err:
             await self._record_limit(
