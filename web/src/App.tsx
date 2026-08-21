@@ -7,8 +7,9 @@ import {
   Route,
   Routes,
   useLocation,
+  useNavigate,
 } from 'react-router-dom'
-import { listConversations } from './api/client'
+import { deleteConversation, listConversations } from './api/client'
 import type { ConversationSummary } from './api/types'
 import { Sidebar } from './components/Sidebar'
 import AdminView from './views/AdminView'
@@ -80,11 +81,10 @@ function AppHeader({
           <MenuIcon />
         </button>
 
-        <Link className="brand" to="/" aria-label="دستیار نجات مستندات لیارا؛ صفحهٔ اصلی">
+        <Link className="brand" to="/" aria-label="دستیار لیارا؛ صفحهٔ اصلی">
           <img className="brand-mark" src="/images/logoLiara.png" alt="" aria-hidden="true" />
           <span>
-            <strong>نجات مستندات لیارا</strong>
-            <small>پاسخ مستند، بدون حدس</small>
+            <strong>دستیار لیارا</strong>
           </span>
         </Link>
 
@@ -123,6 +123,7 @@ function NotFound() {
 
 function AppFrame() {
   const location = useLocation()
+  const navigate = useNavigate()
   const [conversations, setConversations] = useState<ConversationSummary[]>([])
   const [drawerOpen, setDrawerOpen] = useState(false)
   // Held here rather than in the header so closing the drawer from inside it
@@ -146,6 +147,15 @@ function AppFrame() {
     menuRef.current?.focus()
   }, [menuRef])
 
+  const removeConversation = useCallback(
+    async (id: string) => {
+      await deleteConversation(id)
+      setConversations((current) => current.filter((item) => item.id !== id))
+      if (location.pathname === `/chat/${id}`) navigate('/')
+    },
+    [location.pathname, navigate],
+  )
+
   // The demo page stands in for somebody else's site, so it gets none of our
   // chrome — a masthead over it would give away the illusion it exists to make.
   const bare = location.pathname === '/demo'
@@ -166,7 +176,12 @@ function AppFrame() {
         menuRef={menuRef}
       />
       <div className="app-body">
-        <Sidebar conversations={conversations} open={drawerOpen} onClose={closeDrawer} />
+        <Sidebar
+          conversations={conversations}
+          open={drawerOpen}
+          onClose={closeDrawer}
+          onDeleteConversation={removeConversation}
+        />
         <div id="main-content" className="app-content">
           <Routes>
             <Route

@@ -477,17 +477,18 @@ async def _feedback_reasons(executor: Executor, since: datetime) -> Metric:
     grounding. Without the split, a falling satisfaction rate says only that
     something got worse.
     """
+    reason = UsageEvent.payload["reason"].astext
     rows = await executor.execute(
         _within(
             select(
-                UsageEvent.payload["reason"].astext.label("reason"),
+                reason.label("reason"),
                 func.count().label("count"),
             )
             .where(
                 UsageEvent.event_type == UsageEventType.CHAT_RESOLUTION.value,
                 UsageEvent.payload["outcome"].astext == FeedbackOutcome.UNRESOLVED.value,
             )
-            .group_by(UsageEvent.payload["reason"].astext),
+            .group_by(reason),
             since,
         )
     )

@@ -1,4 +1,4 @@
-# Liara Documentation Rescue Assistant
+# Liara Assistant
 
 ![Startcooch Vibe Coding Hackathon](docs/images/hackathon.jpg)
 
@@ -7,7 +7,7 @@
 criteria and what this project does about each of them are in
 [Judging criteria](#judging-criteria) at the end.
 
-**دستیار نجات مستندات لیارا** — a system for people who are stuck in Liara's
+**دستیار لیارا** — a system for people who are stuck in Liara's
 documentation and are not getting unstuck by reading more of it.
 
 The premise is narrow and worth stating plainly: when someone cannot find an

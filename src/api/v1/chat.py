@@ -425,6 +425,37 @@ async def get_conversation(
     )
 
 
+@router.delete(
+    "/conversations/{conversation_id}",
+    status_code=204,
+    response_class=Response,
+    response_model=None,
+)
+async def delete_conversation(
+    conversation_id: uuid.UUID,
+    request: Request,
+    response: Response,
+    db: Annotated[AsyncSession, Depends(get_session)],
+) -> None:
+    session = await resolve_session(db, request, response)
+    conversation = await _owned_conversation(db, conversation_id, session)
+    terminal = {status.value for status in TERMINAL_JOB_STATUSES}
+    active_jobs = await db.scalar(
+        select(func.count(RequestJob.id)).where(
+            RequestJob.conversation_id == conversation.id,
+            RequestJob.status.not_in(terminal),
+        )
+    )
+    if active_jobs:
+        raise RescueError(
+            ErrorCode.CONVERSATION_BUSY,
+            detail=f"conversation has {active_jobs} non-terminal request job(s)",
+            context={"conversation_id": str(conversation.id)},
+        )
+    await db.delete(conversation)
+    await db.flush()
+
+
 @router.post("/messages/{message_id}/feedback", response_model=MessageFeedbackResponse)
 async def create_message_feedback(
     message_id: uuid.UUID,

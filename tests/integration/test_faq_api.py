@@ -5,7 +5,7 @@ from collections.abc import AsyncIterator
 
 import httpx
 import pytest
-from sqlalchemy.ext.asyncio import AsyncConnection
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 
 from src.api.v1.faq import get_faq_embeddings
 from src.db.models import FaqItem
@@ -31,6 +31,7 @@ class StubEmbeddings:
 
 async def test_faq_search_is_synchronous_and_never_generates_an_answer(
     migrated: AsyncConnection,
+    db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     vector = [1.0, *([0.0] * (DIMENSIONS - 1))]
@@ -60,8 +61,8 @@ async def test_faq_search_is_synchronous_and_never_generates_an_answer(
 
     monkeypatch.setattr(faq.GatewayFaqGenerator, "generate", generation_must_not_run)
 
-    async def override_session() -> AsyncIterator[AsyncConnection]:
-        yield migrated
+    async def override_session() -> AsyncIterator[AsyncSession]:
+        yield db_session
 
     def override_embeddings() -> StubEmbeddings:
         return embeddings

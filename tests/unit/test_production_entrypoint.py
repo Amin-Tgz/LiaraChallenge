@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import httpx
+import pytest
+
+from src.main import create_app
+
 ENTRYPOINT = Path(__file__).parents[2] / "docker" / "entrypoint.sh"
 MAIN_CASE = 'case "${APP_ROLE:-api}" in'
 
@@ -35,3 +40,22 @@ def test_health_probe_never_runs_migrations() -> None:
     probe = script[: script.rindex(MAIN_CASE)]
 
     assert "alembic upgrade head" not in probe
+
+
+@pytest.mark.asyncio
+async def test_static_cache_headers_keep_bundles_fast_and_shell_revalidatable() -> None:
+    app = create_app()
+    asset = next((Path("web/dist/assets")).glob("index-*.js")).name
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        bundle = await client.get(f"/assets/{asset}")
+        image = await client.get("/images/logoLiara.png")
+        shell = await client.get("/")
+        worker = await client.get("/service-worker.js")
+
+    assert bundle.headers["cache-control"] == "public, max-age=31536000, immutable"
+    assert "max-age=2592000" in image.headers["cache-control"]
+    assert shell.headers["cache-control"] == "no-cache"
+    assert worker.headers["cache-control"] == "no-cache"

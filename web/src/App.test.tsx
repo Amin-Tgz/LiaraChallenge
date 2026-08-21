@@ -486,7 +486,7 @@ test('the widget is reachable by keyboard and leads into the assistant', async (
     </MemoryRouter>,
   )
 
-  const widget = screen.getByRole('button', { name: /دستیار نجات مستندات لیارا را باز کن/ })
+  const widget = screen.getByRole('button', { name: /دستیار لیارا را باز کن/ })
   widget.focus()
   expect(document.activeElement).toBe(widget)
   await user.keyboard('{Enter}')
@@ -573,4 +573,42 @@ test('Skill and MCP live in the sidebar, beside the conversation history', () =>
   expect(within(sidebar).getByRole('link', { name: /Skill لیارا/ })).toBeDefined()
   expect(within(sidebar).getByRole('link', { name: /سرور MCP/ })).toBeDefined()
   expect(within(sidebar).getByRole('button', { name: /گفت‌وگوی جدید/ })).toBeDefined()
+})
+
+test('a prior conversation can be deleted from the sidebar', async () => {
+  const user = userEvent.setup()
+  const conversationId = '44444444-4444-4444-8444-444444444444'
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input)
+    if (url.endsWith('/chat/conversations') && !init?.method) {
+      return jsonResponse([
+        {
+          id: conversationId,
+          initial_question: 'چطور برنامه را مستقر کنم؟',
+          title: null,
+          rescue_tool: 'chat',
+          message_count: 4,
+        },
+      ])
+    }
+    if (url.endsWith(`/chat/conversations/${conversationId}`) && init?.method === 'DELETE') {
+      return jsonResponse(null, 204)
+    }
+    return jsonResponse({})
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  vi.spyOn(window, 'confirm').mockReturnValue(true)
+  render(<App />)
+
+  const remove = await screen.findByRole('button', { name: /حذف گفت‌وگوی چطور برنامه/ })
+  await user.click(remove)
+
+  await waitFor(() => expect(screen.queryByRole('button', { name: /حذف گفت‌وگو/ })).toBeNull())
+  expect(
+    fetchMock.mock.calls.some(
+      ([input, init]) =>
+        String(input).endsWith(`/chat/conversations/${conversationId}`) &&
+        init?.method === 'DELETE',
+    ),
+  ).toBe(true)
 })

@@ -46,6 +46,15 @@ Every technical claim in an answer SHALL be traceable to retrieved evidence, and
 - **WHEN** an answer presents a citation
 - **THEN** that citation corresponds to a chunk actually returned by retrieval for this turn
 
+### Requirement: Warm but restrained answer tone
+
+Grounded Persian answers SHALL remain precise and operational while avoiding an unnecessarily dry tone. The model MAY use one or two context-appropriate emoji in a normal answer when they improve scanning or warmth. Emoji SHALL NOT appear inside commands, configuration, identifiers, citations, machine-readable fields, or cause-specific error messages, and SHALL NOT substitute for a warning or an abstention.
+
+#### Scenario: Emoji does not weaken technical content
+
+- **WHEN** the agent answers a source-backed operational question
+- **THEN** any emoji is sparse and decorative while the complete steps, exact code, warnings, verification, and citations remain textual and unambiguous
+
 ### Requirement: Abstention when evidence is insufficient
 
 The agent SHALL NOT produce an answer unsupported by retrieved evidence. When evidence is insufficient, it SHALL state this explicitly and suggest what the user can do next.

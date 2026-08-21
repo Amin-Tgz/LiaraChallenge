@@ -76,6 +76,20 @@ The FAQ path SHALL resolve within the request, without enqueuing a job and witho
 - **WHEN** a question is answered from the FAQ path
 - **THEN** no answer-generation model call is made and the only model usage is the query embedding
 
+### Requirement: Generated answers are complete enough to act on
+
+The FAQ generator SHALL prefer a smaller number of complete, source-grounded answers over filling a per-document quota with short or repetitive entries. An operational answer SHALL preserve every source-backed prerequisite, ordered step, exact command or configuration value, relevant alternative, warning or limitation, and verification step needed to complete the task. It SHALL NOT invent missing detail. A concise definitional answer MAY remain short. The Persian prose MAY use at most a small amount of context-appropriate emoji to improve warmth, but emoji SHALL NOT replace technical wording, commands, warnings, or citations.
+
+#### Scenario: Operational answer remains self-contained
+
+- **WHEN** the source section contains a procedure with prerequisites, commands, cautions, and a success check
+- **THEN** the generated FAQ answer includes those elements in executable order and does not collapse them into a one-sentence summary
+
+#### Scenario: Evidence is too narrow for a rich answer
+
+- **WHEN** the selected source section does not contain a prerequisite, warning, or verification method
+- **THEN** the answer omits that element rather than inferring or fabricating it
+
 ### Requirement: Resolution feedback captured
 
 Every presented FAQ result SHALL offer the user a way to report that it resolved their question or that it did not. Feedback SHALL be persisted and associated with the question, the presented entries, and the session.

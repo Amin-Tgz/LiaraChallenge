@@ -43,7 +43,7 @@ export function RescueWidget() {
         onFocus={() => setRevealed(true)}
         onBlur={() => setRevealed(false)}
         onClick={() => navigate('/')}
-        aria-label="جوابت را پیدا نکردی؟ دستیار نجات مستندات لیارا را باز کن"
+        aria-label="جوابت را پیدا نکردی؟ دستیار لیارا را باز کن"
       >
         <span className="rescue-bubble-text">
           جوابت رو

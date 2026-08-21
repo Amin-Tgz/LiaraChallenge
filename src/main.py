@@ -83,7 +83,7 @@ def create_app() -> FastAPI:
     configure_logging()
     settings = get_settings()
     app = FastAPI(
-        title="Liara Documentation Rescue Assistant",
+        title="Liara Assistant",
         version="0.1.0",
         lifespan=lifespan,
         docs_url="/docs",
@@ -104,6 +104,15 @@ def create_app() -> FastAPI:
         set_correlation(trace_id=trace_id)
         response = await call_next(request)
         response.headers["x-request-id"] = trace_id
+        path = request.url.path
+        if path.startswith("/assets/"):
+            response.headers["cache-control"] = "public, max-age=31536000, immutable"
+        elif path.startswith(("/images/", "/brand/")):
+            response.headers["cache-control"] = (
+                "public, max-age=2592000, stale-while-revalidate=86400"
+            )
+        elif path in {"/", "/index.html", "/service-worker.js"}:
+            response.headers["cache-control"] = "no-cache"
         return response
 
     @app.exception_handler(RescueError)

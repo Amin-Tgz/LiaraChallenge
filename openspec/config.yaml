@@ -1,7 +1,7 @@
 schema: spec-driven
 
 context: |
-  Liara Documentation Rescue Assistant — rescues users stuck in Liara's docs via
+  Liara Assistant («دستیار لیارا») — rescues users stuck in Liara's docs via
   FAQ semantic search, an installable Skill, an MCP server, and bounded Agentic RAG chat.
 
   Specification documents (read before writing artifacts):

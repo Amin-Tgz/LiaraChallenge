@@ -18,6 +18,7 @@ from typing import Any
 
 
 class ErrorCode(StrEnum):
+    CONVERSATION_BUSY = "CONVERSATION_BUSY"
     NO_ACTIVE_INDEX = "NO_ACTIVE_INDEX"
     NO_RESULTS_ABOVE_THRESHOLD = "NO_RESULTS_ABOVE_THRESHOLD"
     NO_RESULTS_FOR_FILTER = "NO_RESULTS_FOR_FILTER"
@@ -225,6 +226,19 @@ ERROR_SPECS: dict[ErrorCode, ErrorSpec] = {
             "is looping."
         ),
         transient=False,
+    ),
+    ErrorCode.CONVERSATION_BUSY: ErrorSpec(
+        code=ErrorCode.CONVERSATION_BUSY,
+        http_status=409,
+        message_fa=(
+            "این گفت‌وگو هنوز در حال پاسخ‌گویی است و فعلاً حذف نمی‌شود. "
+            "پس از آماده‌شدن یا ناموفق‌ماندن پاسخ، دوباره حذف را بزنید."
+        ),
+        operator_action=(
+            "Wait for every request job in the conversation to reach completed or failed "
+            "before deleting the conversation."
+        ),
+        transient=True,
     ),
     ErrorCode.SKILL_NOT_AVAILABLE: ErrorSpec(
         code=ErrorCode.SKILL_NOT_AVAILABLE,

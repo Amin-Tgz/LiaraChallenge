@@ -12,3 +12,11 @@ createRoot(root).render(
     <App />
   </StrictMode>,
 )
+
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    void navigator.serviceWorker.register('/service-worker.js').catch((cause: unknown) => {
+      console.warn('image cache is unavailable; continuing without it', cause)
+    })
+  })
+}

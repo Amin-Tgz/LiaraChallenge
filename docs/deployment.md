@@ -32,7 +32,7 @@
 | Ingest scope | Config-driven section allowlist | decided |
 | MCP | Kept, last-phase priority | decided |
 | Persian normalization | Custom normalizer (ی/ي, ک/ك, ZWNJ, digits, spacing) | decided |
-| FAQ threshold | **Cosine similarity**, admin-editable, default 0.4 | decided |
+| FAQ threshold | **Cosine similarity**, admin-editable, default 0.34 | decided |
 
 ### Still open
 

@@ -69,6 +69,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       response.status,
     )
   }
+  if (response.status === 204) return undefined as T
   return (await response.json()) as T
 }
 
@@ -110,6 +111,10 @@ export function getConversation(id: string): Promise<ConversationDetail> {
 
 export function listConversations(): Promise<ConversationSummary[]> {
   return request<ConversationSummary[]>('/chat/conversations')
+}
+
+export function deleteConversation(id: string): Promise<void> {
+  return request<void>(`/chat/conversations/${id}`, { method: 'DELETE' })
 }
 
 export function getJob(id: string): Promise<Job> {

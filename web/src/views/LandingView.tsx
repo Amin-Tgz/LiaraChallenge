@@ -159,13 +159,26 @@ export default function LandingView({ onConversationsChanged }: { onConversation
       <div className="chat-scroll">
         {stage.kind === 'idle' && (
           <section className="composer-intro">
-            <img className="intro-logo" src="/images/logoLiara.png" alt="لیارا" />
-            <h1>در مستندات لیارا گیر کرده‌اید؟</h1>
-            <p className="lead">
-              خطا، کاری که انجام داده‌اید و نتیجهٔ مورد انتظار را بنویسید. اول میان
-              پرسش‌های مستند می‌گردیم؛ اگر کافی نبود، دستیار با ارجاع به مستندات پاسخ
-              می‌دهد.
-            </p>
+            <div className="docs-welcome">
+              <div className="docs-window" aria-hidden="true">
+                <div className="docs-window-bar"><i /><i /><i /></div>
+                <span>docs.liara.ir</span>
+                <strong>Documentation.</strong>
+              </div>
+              <div className="welcome-copy">
+                <span className="welcome-wave">👋 خوش آمدید</span>
+                <h1>دستیار لیارا</h1>
+                <p>هر جا در مستندات گیر کردید، مسئله را همین‌جا با ما در میان بگذارید.</p>
+              </div>
+            </div>
+            <div className="ask-intro">
+              <span className="eyebrow">✨ جست‌وجوی هوشمند در مستندات</span>
+              <h2>چه چیزی شما را متوقف کرده؟</h2>
+              <p className="lead">
+                خطا، کاری که انجام داده‌اید و نتیجهٔ مورد انتظار را بنویسید؛ ابتدا پاسخ‌های
+                مرتبط را پیدا می‌کنیم و اگر کافی نبود، گفتگو را ادامه می‌دهیم.
+              </p>
+            </div>
             <ul className="example-questions" aria-label="نمونهٔ پرسش‌ها">
               {EXAMPLES.map((example) => (
                 <li key={example}>

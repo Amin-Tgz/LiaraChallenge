@@ -1827,6 +1827,236 @@ img.brand-mark {
   font-size: 0.76rem;
 }
 
+/* --- Liara documentation-inspired assistant shell ----------------------- */
+
+.masthead-inner {
+  width: 100%;
+  min-height: 54px;
+  padding-inline: 20px;
+}
+
+.brand-mark {
+  height: 26px;
+}
+
+.app-body {
+  min-height: calc(100dvh - 54px);
+  grid-template-columns: 244px minmax(0, 1fr);
+}
+
+.sidebar {
+  inset-block-start: 54px;
+  height: calc(100dvh - 54px);
+  background: color-mix(in srgb, var(--surface) 94%, var(--bg));
+}
+
+.sidebar nav {
+  padding: 14px 10px 20px;
+  gap: 18px;
+}
+
+.sidebar-heading {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  letter-spacing: 0;
+}
+
+.sidebar-heading svg,
+.delete-conversation svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.conversation-item {
+  position: relative;
+}
+
+.conversation-item > a {
+  padding-inline-end: 38px;
+}
+
+.delete-conversation {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-end: 6px;
+  z-index: 1;
+  display: grid;
+  width: 30px;
+  min-height: 30px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  opacity: 0;
+  transform: translateY(-50%);
+}
+
+.conversation-item:hover .delete-conversation,
+.delete-conversation:focus-visible,
+.delete-conversation:disabled {
+  opacity: 1;
+}
+
+.delete-conversation:hover:not(:disabled) {
+  background: var(--danger-soft);
+  color: var(--danger);
+  transform: translateY(-50%);
+}
+
+.sidebar-delete-error {
+  margin: 8px;
+  color: var(--danger);
+  font-size: 0.76rem;
+}
+
+.chat-scroll {
+  width: min(100% - 40px, 940px);
+  padding-block-start: 28px;
+}
+
+.composer-intro {
+  display: block;
+  padding-block: 0 28px;
+  text-align: start;
+}
+
+.docs-welcome {
+  display: grid;
+  min-height: 205px;
+  overflow: hidden;
+  grid-template-columns: minmax(260px, 0.9fr) minmax(300px, 1.25fr);
+  align-items: center;
+  border: 1px solid color-mix(in srgb, var(--primary) 25%, var(--border));
+  border-radius: 8px;
+  padding: 28px 34px 0;
+  background:
+    linear-gradient(108deg, rgb(117 194 255 / 88%), rgb(159 222 176 / 78%)),
+    var(--surface);
+  color: #0b2035;
+  box-shadow: inset 0 1px rgb(255 255 255 / 44%);
+}
+
+.docs-window {
+  position: relative;
+  grid-column: 2;
+  align-self: end;
+  min-height: 166px;
+  border-radius: 8px 8px 0 0;
+  padding: 72px 16px 12px;
+  background: rgb(232 245 255 / 55%);
+  direction: ltr;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+.docs-window-bar {
+  display: flex;
+  position: absolute;
+  gap: 4px;
+  margin: -72px -16px 0;
+  width: calc(100% + 32px);
+  height: 26px;
+  align-items: center;
+  border-radius: 8px 8px 0 0;
+  padding-inline: 12px;
+  background: #07111b;
+}
+
+.docs-window-bar i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ff6659;
+}
+
+.docs-window-bar i:nth-child(2) { background: #ffd04a; }
+.docs-window-bar i:nth-child(3) { background: #32d186; }
+
+.docs-window span,
+.docs-window strong {
+  display: block;
+}
+
+.docs-window span {
+  color: rgb(11 32 53 / 48%);
+}
+
+.docs-window strong {
+  font-size: clamp(1.45rem, 3vw, 2.15rem);
+  font-weight: 400;
+  line-height: 1.1;
+}
+
+.welcome-copy {
+  grid-column: 1;
+  grid-row: 1;
+  padding: 12px 34px 30px 0;
+}
+
+.welcome-wave {
+  font-size: 0.9rem;
+  font-weight: 750;
+}
+
+.welcome-copy h1 {
+  margin-block: 4px 8px;
+  font-size: clamp(2rem, 4.5vw, 3rem);
+}
+
+.welcome-copy p {
+  margin: 0;
+  color: rgb(11 32 53 / 76%);
+}
+
+.ask-intro {
+  display: grid;
+  padding-block: 34px 12px;
+  justify-items: center;
+  text-align: center;
+}
+
+.ask-intro h2 {
+  margin-block: 0 6px;
+  font-size: clamp(1.35rem, 2.6vw, 1.8rem);
+}
+
+.ask-intro .eyebrow {
+  margin-block-end: 6px;
+}
+
+.ask-intro .eyebrow::before {
+  display: none;
+}
+
+.example-questions {
+  width: 100%;
+  margin-block-start: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.example-questions button {
+  height: 100%;
+  border-radius: 7px;
+  font-size: 0.88rem;
+}
+
+:root[data-theme='dark'] .docs-welcome {
+  background: linear-gradient(108deg, #16456f, #38745d);
+  color: #f5fbff;
+}
+
+:root[data-theme='dark'] .welcome-copy p {
+  color: rgb(245 251 255 / 78%);
+}
+
 @media (max-width: 800px) {
   .host-grid {
     grid-template-columns: 1fr;
@@ -1848,7 +2078,7 @@ img.brand-mark {
        still widens the page into a horizontal scroll, and its links stay in
        the tab order of a drawer nobody opened. */
     position: fixed;
-    inset-block: 72px 0;
+    inset-block: 54px 0;
     inset-inline-start: 0;
     z-index: 25;
     width: min(300px, 84vw);
@@ -1866,7 +2096,7 @@ img.brand-mark {
   .sidebar-scrim {
     display: block;
     position: fixed;
-    inset: 72px 0 0;
+    inset: 54px 0 0;
     z-index: 24;
     background: rgb(9 18 32 / 45%);
   }
@@ -1938,6 +2168,36 @@ img.brand-mark {
   .chat-scroll,
   .composer {
     width: min(100% - 24px, 820px);
+  }
+
+  .chat-scroll {
+    padding-block-end: 132px;
+  }
+
+  .docs-welcome {
+    min-height: 190px;
+    grid-template-columns: 1fr;
+    padding: 24px;
+  }
+
+  .welcome-copy {
+    grid-column: 1;
+  }
+
+  .docs-window {
+    display: none;
+  }
+
+  .welcome-copy {
+    padding: 0;
+  }
+
+  .example-questions {
+    grid-template-columns: 1fr;
+  }
+
+  .delete-conversation {
+    opacity: 1;
   }
 
   .admin-header {

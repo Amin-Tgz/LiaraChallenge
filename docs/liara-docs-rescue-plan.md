@@ -1,10 +1,10 @@
-# Liara Documentation Rescue Assistant
+# Liara Assistant
 
 > سند مرجع محصول، معماری و برنامه‌ی پیاده‌سازی برای مسابقه‌ی لیارا
 
 ## 1. وضعیت سند
 
-- **نام کاری پروژه:** Liara Documentation Rescue Assistant
+- **نام محصول:** دستیار لیارا (Liara Assistant)
 - **وضعیت:** OpenSpec change ساخته شد — `openspec/changes/add-docs-rescue-assistant/`
 - **مالک و مجری:** یک توسعه‌دهنده
 - **زمان پیاده‌سازی:** **حداکثر دو روز** (قطعی)
@@ -519,7 +519,7 @@ caption کردن تمام تصاویر در Scope مسابقه نیست.
 - query embedding با embedding سؤال‌های FAQ مقایسه شود — یک فضای embedding جدا از chunkها.
 - نتایج بر اساس semantic similarity و curated priority مرتب شوند.
 - threshold و top-k configurable باشند و **threshold از پنل ادمین قابل تغییر باشد**.
-- واحد آستانه **similarity** است، نه distance. مقدار پیش‌فرض `0.4`.
+- واحد آستانه **similarity** است، نه distance. مقدار پیش‌فرض فعلی `0.34` است؛ مقدارهای کوتاه و retrieval به‌ترتیب `0.51` و `0.2125` هستند و `.env.example` باید با typed defaults همگام بماند.
 - نتیجه‌ی ضعیف نباید به‌زور نمایش داده شود؛ در این حالت به کاربر گفته شود چیزی پیدا نشد و ابزارهای نجات پیشنهاد شوند.
 - این مسیر باید کاملاً sync باشد و **هیچ فراخوانی مدل برای تولید پاسخ نداشته باشد**.
 - success/failure feedback ذخیره شود.

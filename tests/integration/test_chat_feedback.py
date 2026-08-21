@@ -13,7 +13,7 @@ import uuid
 
 import pytest
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncConnection
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 
 from src.core.errors import ErrorCode, RescueError
 from src.db.models import AnonymousSession, Conversation, Feedback, Message, UsageEvent
@@ -92,12 +92,12 @@ async def _conversation(
 
 
 async def test_the_cited_pages_come_from_the_answer_not_from_the_client(
-    migrated: AsyncConnection,
+    migrated: AsyncConnection, db_session: AsyncSession
 ) -> None:
     session_id, conversation_id, answer_id = await _conversation(migrated)
 
     record = await record_chat_feedback(
-        migrated,
+        db_session,
         session_id=session_id,
         message_id=answer_id,
         outcome=FeedbackOutcome.UNRESOLVED,
@@ -119,12 +119,12 @@ async def test_the_cited_pages_come_from_the_answer_not_from_the_client(
 
 
 async def test_the_dashboard_event_lands_in_the_same_transaction(
-    migrated: AsyncConnection,
+    migrated: AsyncConnection, db_session: AsyncSession
 ) -> None:
     session_id, conversation_id, answer_id = await _conversation(migrated)
 
     await record_chat_feedback(
-        migrated,
+        db_session,
         session_id=session_id,
         message_id=answer_id,
         outcome=FeedbackOutcome.RESOLVED,
@@ -147,13 +147,13 @@ async def test_the_dashboard_event_lands_in_the_same_transaction(
 
 
 async def test_an_abstention_with_no_citations_is_still_recordable(
-    migrated: AsyncConnection,
+    migrated: AsyncConnection, db_session: AsyncSession
 ) -> None:
     """An answer that abstained cites nothing, and is exactly what users reject."""
     session_id, _, answer_id = await _conversation(migrated, citations=[])
 
     record = await record_chat_feedback(
-        migrated,
+        db_session,
         session_id=session_id,
         message_id=answer_id,
         outcome=FeedbackOutcome.UNRESOLVED,

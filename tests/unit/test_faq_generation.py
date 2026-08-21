@@ -5,7 +5,12 @@ import json
 import httpx
 
 from src.core.config import Settings
-from src.services.faq import GatewayFaqGenerator, combined_faq_score, parse_generated_faqs
+from src.services.faq import (
+    SYSTEM_PROMPT,
+    GatewayFaqGenerator,
+    combined_faq_score,
+    parse_generated_faqs,
+)
 
 
 def test_malformed_entries_are_rejected_without_losing_valid_siblings() -> None:
@@ -66,6 +71,12 @@ def test_gateway_requests_strict_schema_with_low_reasoning_effort() -> None:
     assert "پاسخ کوتاه" not in captured["messages"][0]["content"]
     assert captured["response_format"]["type"] == "json_schema"
     assert captured["response_format"]["json_schema"]["strict"] is True
+
+
+def test_faq_prompt_requires_complete_operational_answers_and_restrained_emoji() -> None:
+    assert "پیش‌نیاز" in SYSTEM_PROMPT
+    assert "روش بررسی" in SYSTEM_PROMPT
+    assert "حداکثر یک یا دو ایموجی" in SYSTEM_PROMPT
 
 
 def test_curated_priority_changes_ordering_without_changing_similarity() -> None:

@@ -90,7 +90,7 @@ class _FakeSummarizer:
 async def test_a_short_conversation_is_replayed_verbatim_with_no_model_call(
     db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    conversation_id = await _conversation_with_turns(db_session.connection(), pairs=1)
+    conversation_id = await _conversation_with_turns(await db_session.connection(), pairs=1)
     fake = _FakeSummarizer()
     monkeypatch.setattr(summarization, "_summarize", fake)
 
@@ -98,13 +98,13 @@ async def test_a_short_conversation_is_replayed_verbatim_with_no_model_call(
 
     assert fake.calls == []
     assert context.summary is None
-    assert [turn["content"] for turn in context.turns] == ["پرسش ۱", "پاسخ ۱"]
+    assert [turn["content"] for turn in context.turns] == ["پرسش 1", "پاسخ 1"]
 
 
 async def test_turns_outside_the_window_are_summarized_and_the_summary_is_persisted(
     db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    conversation_id = await _conversation_with_turns(db_session.connection(), pairs=3)
+    conversation_id = await _conversation_with_turns(await db_session.connection(), pairs=3)
     fake = _FakeSummarizer()
     monkeypatch.setattr(summarization, "_summarize", fake)
 
@@ -113,7 +113,7 @@ async def test_turns_outside_the_window_are_summarized_and_the_summary_is_persis
     assert len(fake.calls) == 1
     assert context.summary == "خلاصهٔ نوبت‌های پیشین"
     # Only the most recent pair survives verbatim; the rest became the summary.
-    assert [turn["content"] for turn in context.turns] == ["پرسش ۳", "پاسخ ۳"]
+    assert [turn["content"] for turn in context.turns] == ["پرسش 3", "پاسخ 3"]
 
     stored = (
         await db_session.execute(
@@ -132,7 +132,7 @@ async def test_a_second_pass_summarizes_only_the_new_turns(
 ) -> None:
     """Each turn is condensed once. Re-reading the transcript every turn would
     reintroduce exactly the cost this replaces."""
-    conversation_id = await _conversation_with_turns(db_session.connection(), pairs=3)
+    conversation_id = await _conversation_with_turns(await db_session.connection(), pairs=3)
     fake = _FakeSummarizer()
     monkeypatch.setattr(summarization, "_summarize", fake)
     await build_conversation_context(db_session, conversation_id, settings=_settings())
@@ -144,8 +144,8 @@ async def test_a_second_pass_summarizes_only_the_new_turns(
     # A fourth exchange pushes one more pair out of the window.
     for ordinal, (role, text) in enumerate(
         (
-            (MessageRole.USER.value, "پرسش ۴"),
-            (MessageRole.ASSISTANT.value, "پاسخ ۴"),
+            (MessageRole.USER.value, "پرسش 4"),
+            (MessageRole.ASSISTANT.value, "پاسخ 4"),
         ),
         start=6,
     ):
@@ -170,7 +170,7 @@ async def test_a_second_pass_summarizes_only_the_new_turns(
 async def test_the_summary_reaches_the_agent_marked_as_data(
     db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    conversation_id = await _conversation_with_turns(db_session.connection(), pairs=3)
+    conversation_id = await _conversation_with_turns(await db_session.connection(), pairs=3)
     monkeypatch.setattr(summarization, "_summarize", _FakeSummarizer())
 
     context = await build_conversation_context(db_session, conversation_id, settings=_settings())
@@ -181,14 +181,14 @@ async def test_the_summary_reaches_the_agent_marked_as_data(
     # Recalled conversation text is untrusted input like any other (AGENTS.md
     # rule 4), and the boundary says so in the prompt itself.
     assert "دستور" in SUMMARY_CONTEXT_PREFIX
-    assert messages[1]["content"] == "پرسش ۳"
+    assert messages[1]["content"] == "پرسش 3"
 
 
 async def test_a_failed_summarization_degrades_to_raw_history(
     db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Context is worth having. It is not worth an unanswered question."""
-    conversation_id = await _conversation_with_turns(db_session.connection(), pairs=3)
+    conversation_id = await _conversation_with_turns(await db_session.connection(), pairs=3)
 
     async def unavailable(executor, *, previous, turns, settings, telemetry):  # type: ignore[no-untyped-def]
         return previous
@@ -198,7 +198,7 @@ async def test_a_failed_summarization_degrades_to_raw_history(
     context = await build_conversation_context(db_session, conversation_id, settings=_settings())
 
     assert context.summary is None
-    assert [turn["content"] for turn in context.turns] == ["پرسش ۳", "پاسخ ۳"]
+    assert [turn["content"] for turn in context.turns] == ["پرسش 3", "پاسخ 3"]
     stored = (
         await db_session.execute(
             select(Conversation.history_summary).where(Conversation.id == conversation_id)

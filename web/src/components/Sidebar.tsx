@@ -11,7 +11,7 @@
  * implementations of one list is how the two drift apart.
  */
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import type { ConversationSummary } from '../api/types'
 
@@ -20,11 +20,14 @@ type Props = {
   /** Drawer state. Ignored on desktop, where the rail is always laid out. */
   open: boolean
   onClose: () => void
+  onDeleteConversation: (id: string) => Promise<void>
 }
 
-export function Sidebar({ conversations, open, onClose }: Props) {
+export function Sidebar({ conversations, open, onClose, onDeleteConversation }: Props) {
   const navigate = useNavigate()
   const panel = useRef<HTMLDivElement | null>(null)
+  const [deleting, setDeleting] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) return
@@ -46,6 +49,19 @@ export function Sidebar({ conversations, open, onClose }: Props) {
     navigate('/')
   }
 
+  async function removeConversation(id: string, title: string) {
+    if (!window.confirm(`گفت‌وگوی «${title}» حذف شود؟ این کار قابل بازگشت نیست.`)) return
+    setDeleting(id)
+    setDeleteError(null)
+    try {
+      await onDeleteConversation(id)
+    } catch (cause) {
+      setDeleteError(cause instanceof Error ? cause.message : 'حذف گفت‌وگو انجام نشد.')
+    } finally {
+      setDeleting(null)
+    }
+  }
+
   return (
     <>
       {open && <div className="sidebar-scrim" onClick={onClose} aria-hidden="true" />}
@@ -62,6 +78,7 @@ export function Sidebar({ conversations, open, onClose }: Props) {
 
           <div className="sidebar-section">
             <h2 className="sidebar-heading" id="history-heading">
+              <HistoryIcon />
               گفت‌وگوهای پیشین
             </h2>
             {conversations.length === 0 ? (
@@ -69,7 +86,22 @@ export function Sidebar({ conversations, open, onClose }: Props) {
             ) : (
               <ul className="sidebar-list" aria-labelledby="history-heading">
                 {conversations.map((conversation) => (
-                  <li key={conversation.id}>
+                  <li key={conversation.id} className="conversation-item">
+                    <button
+                      type="button"
+                      className="delete-conversation"
+                      disabled={deleting === conversation.id}
+                      aria-label={`حذف گفت‌وگوی ${conversation.title ?? conversation.initial_question}`}
+                      title="حذف گفت‌وگو"
+                      onClick={() =>
+                        void removeConversation(
+                          conversation.id,
+                          conversation.title ?? conversation.initial_question,
+                        )
+                      }
+                    >
+                      <TrashIcon />
+                    </button>
                     <NavLink
                       to={'/chat/' + conversation.id}
                       onClick={onClose}
@@ -84,11 +116,17 @@ export function Sidebar({ conversations, open, onClose }: Props) {
                 ))}
               </ul>
             )}
+            {deleteError && (
+              <p className="sidebar-delete-error" role="alert">
+                {deleteError}
+              </p>
+            )}
           </div>
 
           <div className="sidebar-section sidebar-tools">
             <h2 className="sidebar-heading" id="tools-heading">
-              ابزارهای نجات
+              <ToolsIcon />
+              ابزارهای دستیار
             </h2>
             <ul className="sidebar-list" aria-labelledby="tools-heading">
               <li>
@@ -122,6 +160,30 @@ export function Sidebar({ conversations, open, onClose }: Props) {
         </nav>
       </div>
     </>
+  )
+}
+
+function HistoryIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 12a8 8 0 1 0 2.34-5.66L4 8.68M4 4v4.68h4.68M12 8v4l2.75 1.75" />
+    </svg>
+  )
+}
+
+function ToolsIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="m12 3 1.15 3.1L16 7.5l-2.85 1.4L12 12l-1.15-3.1L8 7.5l2.85-1.4L12 3ZM5.5 13l.8 2.2 2.2.8-2.2.8L5.5 19l-.8-2.2-2.2-.8 2.2-.8.8-2.2ZM18 13l.65 1.85L20.5 15.5l-1.85.65L18 18l-.65-1.85-1.85-.65 1.85-.65L18 13Z" />
+    </svg>
+  )
+}
+
+function TrashIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" />
+    </svg>
   )
 }
 

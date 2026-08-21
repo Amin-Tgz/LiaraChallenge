@@ -4,6 +4,15 @@ Keeps the system honest when things go wrong — every failure names its own cau
 
 ## ADDED Requirements
 
+### Requirement: Example environment defaults stay synchronized
+
+Every non-secret default documented in `.env.example` SHALL equal the typed default in `Settings`, unless the example explicitly marks the value as a deliberate environment-specific override. Automated tests SHALL compare the two representations so copying the example cannot silently restore obsolete thresholds, budgets, or limits. A local `.env` MAY omit a setting to inherit the typed default and SHALL only need an update when an explicit override is intended.
+
+#### Scenario: A typed default changes
+
+- **WHEN** a non-secret default such as a similarity threshold is changed in `Settings`
+- **THEN** the test fails until `.env.example` and the owning deployment documentation reflect the same default
+
 ### Requirement: Every error identifies its own cause
 
 The system SHALL NOT emit a generic failure or empty-result message that conflates distinct causes. Every failure SHALL carry a stable machine-readable code, a user-facing message in Persian stating the actual cause, and structured log context.

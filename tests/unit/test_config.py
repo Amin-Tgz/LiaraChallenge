@@ -2,13 +2,41 @@
 
 from __future__ import annotations
 
-import pytest
+from pathlib import Path
 
-from src.core.config import Settings
+import pytest
+from pydantic import TypeAdapter
+
+from src.core.config import SECRET_FIELDS, Settings
 
 
 def _settings(**overrides: object) -> Settings:
     return Settings(_env_file=None, **overrides)  # type: ignore[arg-type]
+
+
+def test_env_example_non_secret_defaults_match_typed_settings() -> None:
+    rows = dict(
+        line.split("=", 1)
+        for line in Path(".env.example").read_text(encoding="utf-8").splitlines()
+        if line and not line.startswith("#") and "=" in line
+    )
+    mismatches: dict[str, tuple[object, object]] = {}
+    for env_name, raw_value in rows.items():
+        field_name = env_name.lower()
+        field = Settings.model_fields.get(field_name)
+        if field is None or field_name in SECRET_FIELDS or raw_value == "":
+            continue
+        example_value = TypeAdapter(field.annotation).validate_python(raw_value)
+        # Compare against the declared default, not a constructed instance:
+        # an operator's ambient environment (a compose `env_file`, a shell
+        # export) legitimately overrides the runtime value and must not be
+        # mistaken for drift in the example file.
+        if field.is_required():
+            continue
+        typed_default = field.default
+        if example_value != typed_default:
+            mismatches[env_name] = (example_value, typed_default)
+    assert mismatches == {}, f".env.example drifted from Settings: {mismatches}"
 
 
 def test_embedding_dimensions_must_stay_hnsw_indexable() -> None:
@@ -187,9 +215,19 @@ def test_summary_model_falls_back_to_the_chat_model() -> None:
     )
 
 
-def test_similarity_thresholds_carry_the_relaxed_defaults() -> None:
+def test_similarity_thresholds_carry_the_relaxed_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     # Lowered 15% from 0.4/0.6/0.25 so questions phrased in a user's own words
-    # stop falling just under the bar.
+    # stop falling just under the bar. Ambient environment variables (a compose
+    # `env_file`, an operator's shell) must not rewrite the defaults this test
+    # guards.
+    for name in (
+        "FAQ_SIMILARITY_THRESHOLD",
+        "FAQ_SHORT_QUERY_SIMILARITY_THRESHOLD",
+        "RETRIEVAL_SIMILARITY_THRESHOLD",
+    ):
+        monkeypatch.delenv(name, raising=False)
     settings = _settings()
     assert settings.faq_similarity_threshold == pytest.approx(0.34)
     assert settings.faq_short_query_similarity_threshold == pytest.approx(0.51)

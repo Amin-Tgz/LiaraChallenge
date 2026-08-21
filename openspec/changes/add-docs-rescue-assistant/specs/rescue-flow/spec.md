@@ -84,6 +84,53 @@ The system SHALL present conversation history and the Skill and MCP paths in a p
 - **WHEN** the sidebar is opened as a drawer and the user presses Escape
 - **THEN** it closes and focus returns to the control that opened it
 
+### Requirement: User-controlled conversation deletion
+
+Each prior conversation in the sidebar SHALL expose a clearly labelled delete action. The API SHALL delete only a conversation owned by the anonymous session making the request and SHALL report a foreign identifier exactly like a missing one. Deletion SHALL remove the conversation transcript, jobs, and answer feedback through the defined database relationships while retaining aggregate usage events with their conversation reference cleared. A conversation with a non-terminal job SHALL NOT be deleted until that work reaches a terminal state.
+
+#### Scenario: An owned completed conversation is deleted
+
+- **WHEN** the user activates delete for one of their completed prior conversations
+- **THEN** it disappears from the sidebar and its route is no longer retrievable
+
+#### Scenario: Another session cannot delete a conversation
+
+- **WHEN** a session submits the identifier of a conversation it does not own
+- **THEN** the API returns the same not-found response used for an unknown identifier and changes no data
+
+#### Scenario: In-flight work is protected
+
+- **WHEN** a conversation has a queued, retrieving, generating, or retrying job
+- **THEN** deletion is refused with a cause-specific conflict response and the conversation remains available
+
+### Requirement: Liara documentation visual language and product identity
+
+The user-facing product name SHALL be «دستیار لیارا». The header SHALL NOT show the removed tagline «پاسخ مستند، بدون حدس». The landing surface SHALL follow the supplied Liara documentation reference through a slim documentation-style sidebar, restrained borders and spacing, a blue-to-green welcome panel, and compatible light and dark themes without copying unrelated documentation navigation. Conversation history, Skill, and MCP groups SHALL each have a recognizable icon. UI copy MAY use a small amount of purposeful emoji, without placing emoji in code, identifiers, accessibility labels, or error causes.
+
+#### Scenario: Landing page reflects the supplied reference
+
+- **WHEN** the assistant opens on desktop in either theme
+- **THEN** the page presents the «دستیار لیارا» identity, documentation-like rail and welcome treatment, and no removed tagline
+
+#### Scenario: Sidebar groups are scannable
+
+- **WHEN** the sidebar is visible
+- **THEN** prior conversations, Skill, and MCP are each introduced by a distinct icon that remains decorative to assistive technology
+
+### Requirement: Viewed documentation images remain locally available
+
+The web client SHALL lazily load documentation images and, after a successful first view, cache them in browser-managed storage for reuse. Cache failure, unavailable storage, or an offline miss SHALL NOT disturb the answer or replace the existing alternative-text fallback. Same-origin versioned bundles SHALL be served with immutable caching, while the HTML shell SHALL remain revalidatable so deployments are not pinned to stale UI.
+
+#### Scenario: A viewed image is reused
+
+- **WHEN** a documentation image has loaded once and the same browser requests it again
+- **THEN** the client may satisfy the request from browser-managed cache without requiring a successful network transfer
+
+#### Scenario: Caching is unavailable
+
+- **WHEN** service-worker or cache storage is unavailable or rejects the image
+- **THEN** the image still loads normally from its source, and a load failure still renders its alternative text without affecting the answer
+
 ### Requirement: Documentation embed demonstration
 
 The system SHALL provide a demonstration page reproducing a Liara documentation page carrying a floating rescue widget, to show where the assistant is intended to be used. The page SHALL be labelled as a demonstration and SHALL NOT present its content as real documentation.

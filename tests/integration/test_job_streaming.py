@@ -13,6 +13,7 @@ from redis.asyncio import Redis
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.config import Settings
 from src.core.errors import ErrorCode, RescueError
 from src.db.models.conversation import AnonymousSession, Conversation, RequestJob
 from src.db.models.enums import JobStatus
@@ -333,12 +334,22 @@ async def test_posting_the_same_idempotency_key_twice_returns_one_job(
     assert first.json()["job"]["id"] == second.json()["job"]["id"]
 
 
-async def test_a_fourth_user_turn_is_rejected_without_creating_a_job(
+async def test_turns_past_the_configured_ceiling_are_rejected_without_creating_a_job(
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # 21.4 removed the three-turn product cap; HISTORY_LIMIT_REACHED now guards
+    # only the abuse ceiling, so this test exercises exactly that ceiling.
     anon, _ = await _seed(db_session)
     monkeypatch.setattr("src.api.v1.chat.enqueue", _no_enqueue)
+    monkeypatch.setattr(
+        "src.api.v1.chat.get_settings",
+        lambda: Settings(
+            _env_file=None,
+            max_conversation_turns=3,
+            conversation_summary_trigger_turns=2,
+        ),
+    )
 
     app = create_app()
     client = await _client(app, db_session, anon)

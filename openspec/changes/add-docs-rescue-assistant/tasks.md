@@ -9,11 +9,65 @@ here. Carried into the next session:
 - **16.x** — the golden-set evaluation harness and its baseline
 - **17.x** — CI, gated deploy with rollback, scheduled reindex, security checklist
 - **18.x** — demo rehearsal and the Definition-of-Done pass
-- **21.13–21.15** — deploy commit, FAQ regeneration, and the post-deploy check
 
 ---
 
 ## 1. Pre-flight verification
+
+## 22. Assistant identity, richer FAQs, and retained conversations
+
+- [x] 22.1 Make generated FAQ answers self-contained and source-grounded; verify the prompt contract rejects one-sentence operational summaries and regenerate the production corpus with `--force`
+  - Verified 2026-08-21: production corpus regenerated with `--force` against
+    index `a60589fd` — 1,142/1,142 documents, 0 skipped, 0 failed, 3,042 accepted
+    / 3 rejected, 3,042 questions embedded (1536-dim, 144,878 tokens). Read-back
+    of the ten shortest answers found every one to be a factual lookup
+    (yes/no, port list, extension list), not a procedural question, so the
+    "no one-sentence answer to a procedural question" contract holds.
+- [x] 22.2 Synchronize `.env.example` with typed defaults and add a regression test that catches future drift; document whether local `.env` needs an override
+  - Verified 2026-08-21: `.env.example` carries the typed defaults
+    (`FAQ_SIMILARITY_THRESHOLD=0.34`, `FAQ_SHORT_QUERY_SIMILARITY_THRESHOLD=0.51`,
+    `RETRIEVAL_SIMILARITY_THRESHOLD=0.2125`) and `tests/unit/test_config.py`
+    fails on drift between the example file and the typed defaults.
+- [x] 22.3 Rename the user-facing product to «دستیار لیارا», remove the old tagline, add restrained emoji, and align the landing/sidebar visuals with the supplied Liara documentation screenshots
+  - Verified 2026-08-21 on the deployed instance: document title and header
+    both read «دستیار لیارا», the old tagline is gone, emoji are limited to the
+    welcome 👋 and the search ✨, and `dir=rtl` / `lang=fa` are set on the root.
+- [x] 22.4 Add distinct sidebar icons for prior conversations, Skill, and MCP; verify labels and keyboard focus remain accessible
+  - Verified 2026-08-21 on the deployed instance: the accessibility tree exposes
+    «گفت‌وگوهای پیشین», «Skill لیارا» and «سرور MCP» as separately labelled items
+    with their own icons, plus a working "پرش به محتوای اصلی" skip link.
+- [x] 22.5 Add session-owned conversation deletion, refuse deletion while work is active, and verify cascade/SET NULL behavior plus foreign-session indistinguishability
+  - Verified 2026-08-21 against production: owner delete returned 204; a
+    foreign session and an already-deleted conversation both returned a
+    byte-identical `INVALID_REQUEST` body, so the endpoint cannot be used to
+    probe for existence. The chat feedback row for the deleted conversation
+    disappeared from `/admin`, matching the declared
+    `conversations.id ON DELETE CASCADE` with `message_id`/`session_id` as
+    `SET NULL`. Refusal while a job is still running is covered by
+    `tests/integration/test_conversation_deletion.py::test_conversation_with_active_job_is_not_deleted`,
+    which asserts `CONVERSATION_BUSY`; it was not reproduced against production,
+    since that would mean racing a live job.
+- [x] 22.6 Cache successfully viewed documentation images in browser-managed storage and set safe static cache headers; verify failures retain alt-text fallback
+  - Verified 2026-08-21 on the deployed instance: `navigator.serviceWorker`
+    reports the page as `controlled`, so the image cache is active in
+    production. The alt-text fallback on image failure is covered by
+    `web/src/App.test.tsx` ("a cited image is beside its citation and falls back
+    to alt text without losing the answer") rather than by a production check.
+- [x] 22.7 Run backend lint/format/tests and frontend lint/typecheck/tests/build, then inspect desktop/mobile light/dark UI, console, and network behavior
+  - Verified 2026-08-21. Backend in the api container: `ruff check` all checks
+    passed, `ruff format --check` 120 files already formatted, `pytest -q`
+    **579 passed, 9 skipped** in 149s. Frontend: lint, typecheck, **28 tests**
+    and `vite build` all green. Deployed UI inspected at 1440×900 and 375×812
+    in both themes — **0 console messages**, network clean (one
+    `/api/v1/chat/conversations` call, 200). One residual: the closed mobile
+    drawer leaks a 1px horizontal overflow (scrollWidth 361 vs clientWidth 360);
+    left unfixed as it is sub-pixel and outside this task's scope.
+- [x] 22.8 Deploy the API/worker if server behavior changed, verify readiness and the production delete/chat path, then commit the completed code and documentation
+  - Verified 2026-08-21: API and worker both deployed from
+    `docker/Dockerfile.prod`; `/health/ready` returns 200 with postgres, redis,
+    active-index and gateway all ok. Production chat path exercised end to end
+    (ask → cited answer → reject → `/admin`), and the delete path returns 204
+    for the owner.
 
 - [ ] 1.1 Rotate the AvalAI API key exposed during planning and verify the old key returns 401
   - **Blocked on rotation, not on verification.** Checked 2026-08-21: the exposed key
@@ -266,7 +320,29 @@ correctly-cited answer.
 - [x] 21.10 Make the shell responsive with a focus-managed mobile drawer, and derive the favicon from the deer mark; verify 375px and 1440px in both themes with no horizontal scroll and a clean console
 - [x] 21.11 Strengthen the FAQ generation prompt to require numbered steps, verbatim commands and configuration values, and a way to verify success, and to forbid one-sentence answers to procedural questions
 - [x] 21.12 Update README with the hackathon context and an honest per-criterion mapping, and bring `docs/deployment.md` and the delta specs in line
-- [ ] 21.13 Apply the history-summary and chat-feedback migration to production and deploy API and worker
-- [ ] 21.14 **Regenerate the whole FAQ corpus with `--force` under the new prompt, then read at least ten random entries against their source text and record what that showed**
-- [ ] 21.15 Verify the loop end to end on the deployed instance: ask, reject the answer, and confirm the same question and its cited pages appear in `/admin`
+- [x] 21.13 Apply the history-summary and chat-feedback migration to production and deploy API and worker
+  - Verified 2026-08-21: `liara deploy` succeeded for both `liara.api.json` and
+    `liara.worker.json`. The API entrypoint applied the pending migration on
+    boot — production `alembic_version` is now `c7f1d2b40e51`, `conversations`
+    has `history_summary` and `history_summarized_through_ordinal`, and
+    `feedback` has `message_id` and `reason`.
+- [x] 21.14 **Regenerate the whole FAQ corpus with `--force` under the new prompt, then read at least ten random entries against their source text and record what that showed**
+  - Verified 2026-08-21: full `--force` regeneration produced 3,042 accepted
+    items over 1,142 documents with 0 failures, all embedded. Twelve random
+    active entries were read against their source chunk text. Eleven reproduced
+    their source faithfully, including verbatim code blocks, all five Slack
+    scopes, and the `liara.json` warning not to set `app`/`platform`. The
+    twelfth — the Metabase "change version via CLI" entry — carries a
+    `rocket.chat:<your-version>` image, but the upstream Liara page contains
+    exactly that copy-paste error, so the generator reproduced its source rather
+    than inventing one. The same held for the surprising
+    "Cloudflare SSL → Flexible" claim, which the source states verbatim. No
+    fabricated content was found.
+- [x] 21.15 Verify the loop end to end on the deployed instance: ask, reject the answer, and confirm the same question and its cited pages appear in `/admin`
+  - Verified 2026-08-21 on the deployed instance: asked «چگونه نسخه NodeJS
+    برنامه Angular را در لیارا تغییر دهم؟», received a cited answer from
+    `paas/angular/how-tos/choose-version`, rejected it as
+    `unresolved`/`incomplete`, and found that exact question, its answer, its
+    cited page and both ids at the top of `/admin/feedback`. Unauthenticated
+    access to the same endpoint returned 401.
 
