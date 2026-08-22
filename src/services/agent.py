@@ -16,6 +16,7 @@ from src.core.config import Settings, get_settings
 from src.core.errors import ERROR_SPECS, ErrorCode, RescueError
 from src.core.logging import get_logger
 from src.core.normalization import normalize_query
+from src.core.tracing import opik_span, opik_turn
 from src.db.models import UsageEvent
 from src.db.models.enums import UsageEventType
 from src.services.agent_tools import AGENT_TOOL_NAMES, AgentToolRegistry
@@ -742,10 +743,19 @@ class BoundedAgent:
                         continue
                     query_forms.add(query)
                     rewrites_used += 1
-                output = await self.tools.execute(name, arguments)
+                    # Opik span, not the SSE ThinkingTrace above: a rewrite is
+                    # worth its own node so a turn's query drift is readable.
+                    with opik_span("agent.query_rewrite") as rewrite_span:
+                        rewrite_span.metadata(rewrite_index=rewrites_used, tool=name)
+                        rewrite_span.content(query=query)
+                with opik_span(f"agent.tool.{name}", kind="tool") as tool_span:
+                    tool_span.metadata(tool=name, call_index=tool_calls_used + 1)
+                    tool_span.content(arguments=arguments)
+                    output = await self.tools.execute(name, arguments)
+                    found, best = _result_shape(output)
+                    tool_span.metadata(result_count=found, top_similarity=best)
                 _collect_evidence(output, evidence, evidence_metadata, evidence_images)
                 tool_calls_used += 1
-                found, best = _result_shape(output)
                 await trace.emit(
                     tool=name,
                     query=_raw_tool_query(arguments),
@@ -780,6 +790,49 @@ class BoundedAgent:
     ) -> AgentTurnResult:
         """Run one turn inside the configured wall-clock deadline."""
         telemetry = telemetry or GatewayTelemetry(question=question)
+        # One job, one Opik trace: every retrieval, rewrite, and model call
+        # below lands under it. `thread_id` groups a conversation's turns.
+        with opik_turn(
+            "agent.turn",
+            thread_id=str(telemetry.conversation_id) if telemetry.conversation_id else None,
+        ) as turn:
+            turn.metadata(
+                trace_id=telemetry.trace_id,
+                job_id=str(telemetry.job_id) if telemetry.job_id else None,
+                history_depth=len(messages),
+                max_tool_calls=self.settings.agent_max_tool_calls,
+                max_rewrites=self.settings.agent_max_rewrites,
+                token_budget=self.settings.agent_token_budget,
+            )
+            turn.content(question=question)
+            result = await self._run_bounded(
+                executor,
+                question=question,
+                messages=messages,
+                telemetry=telemetry,
+                on_trace=on_trace,
+            )
+            turn.metadata(
+                tool_calls=result.tool_calls,
+                rewrites=result.rewrites,
+                total_tokens=result.total_tokens,
+                citation_count=len(result.citations),
+                needs_clarification=result.needs_clarification,
+                limit_reason=result.limit_reason,
+                error_code=result.error_code.value if result.error_code else None,
+            )
+            turn.content_output(answer=result.content)
+            return result
+
+    async def _run_bounded(
+        self,
+        executor: Executor,
+        *,
+        question: str,
+        messages: Sequence[Mapping[str, Any]],
+        telemetry: GatewayTelemetry,
+        on_trace: TraceSink | None,
+    ) -> AgentTurnResult:
         try:
             async with asyncio.timeout(self.settings.agent_timeout_seconds):
                 return await self._run(

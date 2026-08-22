@@ -31,6 +31,7 @@ from src.core.logging import (
     set_correlation,
     shutdown_telemetry_logging,
 )
+from src.core.tracing import configure_tracing, shutdown_tracing
 from src.db.models.conversation import Conversation, RequestJob
 from src.db.models.enums import TERMINAL_JOB_STATUSES, JobStatus
 from src.db.session import dispose_engine, get_sessionmaker
@@ -170,6 +171,7 @@ async def _run(stop: asyncio.Event) -> None:
 
 async def main() -> None:
     configure_logging()
+    configure_tracing()
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
@@ -188,6 +190,7 @@ async def main() -> None:
         with contextlib.suppress(Exception):
             await dispose_engine()
         logger.info("worker stopped")
+        shutdown_tracing()
         shutdown_telemetry_logging()
 
 

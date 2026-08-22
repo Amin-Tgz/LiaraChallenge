@@ -25,6 +25,7 @@ from src.core.config import Settings, get_settings
 from src.core.errors import ErrorCode, RescueError
 from src.core.logging import get_logger
 from src.core.normalization import normalize_query
+from src.core.tracing import SpanRecorder, opik_span
 from src.db.models import Document, DocumentChunk, IndexVersion, UsageEvent
 from src.db.models.enums import UsageEventType
 
@@ -761,6 +762,38 @@ async def search_documentation(
     """Public retrieval contract with thresholding and distinct failures."""
     settings = settings or get_settings()
     telemetry = telemetry or RetrievalTelemetry()
+    with opik_span("retrieval.search_documentation", kind="tool") as span:
+        span.metadata(
+            top_k=top_k if top_k is not None else settings.retrieval_top_k,
+            # RULES.md §2: similarity everywhere, never distance.
+            similarity_threshold=settings.retrieval_similarity_threshold,
+            trace_id=telemetry.trace_id,
+            explicit_filters=sorted(intent.explicit_filters) if intent else [],
+        )
+        span.content(query=query)
+        return await _search_documentation(
+            executor,
+            query,
+            embeddings,
+            span=span,
+            settings=settings,
+            top_k=top_k,
+            intent=intent,
+            telemetry=telemetry,
+        )
+
+
+async def _search_documentation(
+    executor: Executor,
+    query: str,
+    embeddings: EmbeddingProvider,
+    *,
+    span: SpanRecorder,
+    settings: Settings,
+    top_k: int | None,
+    intent: RetrievalIntent | None,
+    telemetry: RetrievalTelemetry,
+) -> list[FusedRetrievalResult]:
     try:
         results = await hybrid_retrieve(
             executor,
@@ -771,6 +804,7 @@ async def search_documentation(
             intent=intent,
         )
     except RescueError as err:
+        span.error(err.code.value, err.detail)
         await _record_retrieval_event(
             executor,
             query=query,
@@ -789,6 +823,10 @@ async def search_documentation(
         )
         raise
 
+    span.metadata(
+        candidate_count=len(results),
+        candidate_top_similarity=results[0].similarity if results else None,
+    )
     above_threshold = [
         result for result in results if result.similarity >= settings.retrieval_similarity_threshold
     ]
@@ -801,6 +839,8 @@ async def search_documentation(
             field_name, present = next(iter(unmatched.items()))
             requested = intent.explicit_filters[field_name] if intent else ""
             filter_code = ErrorCode.NO_RESULTS_FOR_FILTER
+            span.metadata(result_count=0, filter_field=field_name)
+            span.error(filter_code.value, f"no chunk carries {field_name}={requested!r}")
             await _record_retrieval_event(
                 executor,
                 query=query,
@@ -831,6 +871,12 @@ async def search_documentation(
                 },
             )
         code = ErrorCode.NO_RESULTS_ABOVE_THRESHOLD
+        span.metadata(result_count=0)
+        span.error(
+            code.value,
+            "index searched; no candidate reached "
+            f"similarity {settings.retrieval_similarity_threshold}",
+        )
         await _record_retrieval_event(
             executor,
             query=query,
@@ -860,6 +906,15 @@ async def search_documentation(
             },
         )
 
+    span.metadata(
+        result_count=len(above_threshold),
+        top_similarity=above_threshold[0].similarity,
+        index_version=str(above_threshold[0].index_version_id),
+    )
+    span.output(
+        sources=[result.citation_url for result in above_threshold],
+        similarities=[round(result.similarity, 4) for result in above_threshold],
+    )
     await _record_retrieval_event(
         executor,
         query=query,

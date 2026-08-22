@@ -28,6 +28,7 @@ from src.core.logging import (
     set_correlation,
     shutdown_telemetry_logging,
 )
+from src.core.tracing import configure_tracing, shutdown_tracing
 from src.mcp.server import build_mcp_asgi_app, build_mcp_server
 from src.services.metrics import PrometheusMiddleware, prometheus_response
 
@@ -57,6 +58,9 @@ _RESERVED_PREFIXES = (
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("api starting", extra={"app_env": get_settings().app_env})
+    # Build the Opik client here rather than on the first request, so a
+    # slow or unreachable telemetry backend costs startup, not a user.
+    configure_tracing()
     # Starlette does not run the lifespan of a mounted sub-application, so the
     # MCP session manager has to be entered here. Without this the endpoint
     # mounts and accepts connections, then fails on the first tool call — a
@@ -76,6 +80,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await close_redis()
     await dispose_engine()
     logger.info("api stopped")
+    shutdown_tracing()
     shutdown_telemetry_logging()
 
 

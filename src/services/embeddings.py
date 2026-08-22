@@ -26,6 +26,7 @@ import httpx
 from src.core.config import Settings, get_settings
 from src.core.errors import ErrorCode, RescueError
 from src.core.logging import get_logger
+from src.core.tracing import opik_span
 
 logger = get_logger(__name__)
 
@@ -160,6 +161,22 @@ class EmbeddingClient:
         if not texts:
             raise RescueError(ErrorCode.INVALID_REQUEST, detail="embed_batch called with no inputs")
 
+        with opik_span("embeddings.batch", kind="llm") as span:
+            span.metadata(
+                model=self.model,
+                dimensions=self.dimensions,
+                input_count=len(texts),
+                input_chars=sum(len(text) for text in texts),
+            )
+            batch = self._embed_batch(texts)
+            span.usage(
+                model=batch.model,
+                prompt_tokens=batch.prompt_tokens,
+                total_tokens=batch.total_tokens,
+            )
+            return batch
+
+    def _embed_batch(self, texts: Sequence[str]) -> EmbeddingBatch:
         response = self._post(
             {
                 "model": self.model,

@@ -1,12 +1,14 @@
 # Task list
 
-**Open status, as of 2026-08-21.** Everything below is either checked or listed
+**Open status, as of 2026-08-22.** Everything below is either checked or listed
 here. Carried into the next session:
 
 - **1.1** — rotate the AvalAI key exposed during planning (needs panel access)
-- **14.3, 14.5–14.9** — remaining observability: log redaction, correlation ids,
-  Opik spans, per-request cost, retry classification, all-providers-unavailable
-- **16.x** — the golden-set evaluation harness and its baseline
+- **14.3, 14.5, 14.7–14.9** — remaining observability: log redaction,
+  correlation ids, per-request cost, retry classification,
+  all-providers-unavailable
+- **16.5** — the golden set runs and its baseline is recorded, but Q8 and Q9
+  answer instead of asking, and Q3 fails with `NO_RESULTS_FOR_FILTER`
 - **17.x** — CI, gated deploy with rollback, scheduled reindex, security checklist
 - **18.x** — demo rehearsal and the Definition-of-Done pass
 
@@ -256,7 +258,30 @@ here. Carried into the next session:
 - [ ] 14.3 Implement secret redaction in logging; verify no key, cookie, or token appears in emitted logs
 - [x] 14.4 Verify no provider credential is present in the delivered frontend bundle
 - [ ] 14.5 Attach correlation identifiers across API and worker logs; verify a single request is reconstructable from its logs
-- [ ] 14.6 Wire Opik tracing for retrieval and generation spans; verify making the telemetry backend unreachable does not fail a user request
+- [x] 14.6 Wire Opik tracing for retrieval and generation spans; verify making the telemetry backend unreachable does not fail a user request
+  - Verified 2026-08-22. Spans emitted from `src/core/tracing.py`:
+    `retrieval.search_documentation` (tool — query, result count, threshold,
+    top **similarity**, and the taxonomy code on each distinct failure),
+    `chat.completion` with a `chat.attempt.<provider>` child per provider so
+    the fallback path is visible, `embeddings.batch`, `faq.generate`,
+    `agent.turn` as one trace per job with `agent.tool.<name>` and
+    `agent.query_rewrite` children, and `eval.judge`.
+  - Acceptance criterion: `tests/integration/test_telemetry_failure.py` points
+    Opik at a closed port with the real SDK and a real client, so every span
+    send genuinely fails. A full agent turn and a chat completion both return
+    normally. Measured cost of a span against the dead backend: ~3 ms; client
+    construction is the slow part (~5 s) and happens once, at startup, in the
+    API lifespan and in `worker.main`.
+  - `tests/unit/test_tracing.py` asserts no key, bearer token, cookie, or DSN
+    survives into a span payload (same `redact()` as the log path), that
+    `OPIK_CAPTURE_CONTENT=false` keeps every count and similarity while
+    dropping question and answer text, and that with `OPIK_ENABLED=false` the
+    `opik` package is never imported — checked in a subprocess.
+  - Opik is the hosted service at comet.com. With capture on, the question,
+    retrieved documentation text, and the answer leave our infrastructure.
+    Off by default; enabling needs `OPIK_ENABLED`, a key, and a workspace.
+  - `trace.emit(...)` in `src/services/agent.py` is untouched: it is the SSE
+    ThinkingTrace relay and has nothing to do with this.
 - [ ] 14.7 Record operational metrics including token usage and cost per request; verify cost is attributable to a single request
 - [ ] 14.8 Verify retry classification: timeouts and 5xx retry, validation and auth failures do not
 - [ ] 14.9 Verify all-providers-unavailable preserves the question and job and returns its distinct code
@@ -270,11 +295,44 @@ here. Carried into the next session:
 
 ## 16. Evaluation
 
-- [ ] 16.1 Implement the harness parsing `docs/eval/golden-set.md`; verify all 10 questions load with their expected sources
-- [ ] 16.2 Implement deterministic Recall@k and citation-correctness scoring; verify computed without any model call
-- [ ] 16.3 Implement LLM-as-judge scoring with a judge model different from the model under test; verify configuration rejects them being equal
-- [ ] 16.4 **Run the golden set, record the baseline, and manually spot-check 10 judge verdicts against human judgement**
+- [x] 16.1 Implement the harness parsing `docs/eval/golden-set.md`; verify all 10 questions load with their expected sources
+  - Verified 2026-08-22: `src/services/evaluation/golden_set.py`. All ten load
+    with their `expected_sources`, and the parser refuses a set it cannot read
+    in full rather than reporting a missing field as a zero score.
+- [x] 16.2 Implement deterministic Recall@k and citation-correctness scoring; verify computed without any model call
+  - Verified 2026-08-22: `src/services/evaluation/scoring.py` imports no model
+    client and takes only URLs, booleans, and an `ErrorCode`. URLs are
+    canonicalised so a heading anchor and a trailing slash are the same page.
+    `uv run python -m scripts.evaluate --no-judge` produces the whole
+    deterministic table with no judge call.
+- [x] 16.3 Implement LLM-as-judge scoring with a judge model different from the model under test; verify configuration rejects them being equal
+  - Verified 2026-08-22: `src/services/evaluation/judge.py`. Both
+    `judge_settings()` and `LlmJudge.__init__` call
+    `assert_judge_differs_from_model_under_test()`, and `scripts/evaluate.py`
+    calls it before the first provider request rather than after ten of them.
+    Run used `gpt-5.6-terra` against `gemini-3.7-flash`.
+- [x] 16.4 **Run the golden set, record the baseline, and manually spot-check 10 judge verdicts against human judgement**
+  - Run 2026-08-22 against index `79616001-aafd-47b4-b2e1-453fb385dddb`.
+    Baseline in `docs/eval/baseline.md`: Recall@8 0.767, citation correctness
+    0.625, grounded citations 1.000, clarification 0.800, abstention 1.000,
+    mean latency 7.9 s, 121k tokens. Judge means: relevance 4.89,
+    completeness 4.00, groundedness 4.11, unsupported-claim rate 0.556.
+  - Spot-check in `docs/eval/judge-calibration.md`: nine verdicts reviewed
+    against human judgement and all nine agree. The tenth does not exist —
+    Q3 failed with `NO_RESULTS_FOR_FILTER` and produced no answer to judge, so
+    the harness does not call the judge for it.
 - [ ] 16.5 Verify the abstention question abstains and the two clarification questions ask before answering
+  - Run 2026-08-22 — **half verified, and the failing half is a product
+    finding, not a harness gap.** Q10 abstains correctly: it states that no
+    guaranteed p95/p99 figure exists and invents no number, confirmed by both
+    the deterministic check and the judge.
+  - Q8 and Q9 both answer outright instead of asking first, so
+    `clarification_asked` is false for both and clarification correctness is
+    0.800 rather than 1.000. Q8 also retrieves none of its expected pages
+    (Recall@8 = 0.00). Fixing the clarification path is its own change.
+  - Q3 additionally fails with `NO_RESULTS_FOR_FILTER`: the agent filters on a
+    metadata value the corpus does not carry and the tool error ends the turn.
+    Worth its own task alongside 16.5.
 
 ## 17. CI/CD and delivery
 

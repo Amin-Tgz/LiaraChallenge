@@ -197,7 +197,8 @@ values you need to supply yourself:
 | `EMBEDDING_API_KEY` | AvalAI key for embeddings |
 | `PORTKEY_FALLBACK_*` | Secondary OpenAI-compatible provider |
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | HTTP Basic for the admin console |
-| `OPIK_API_KEY` / `OPIK_WORKSPACE` | LLM tracing (optional) |
+| `OPIK_API_KEY` / `OPIK_WORKSPACE` | Opik tracing. Also needs `OPIK_ENABLED=true`; off by default |
+| `OPIK_CAPTURE_CONTENT` | `true` sends question, retrieved docs, and answer to hosted Opik; `false` keeps only counts, similarities, and error codes |
 | `EVAL_JUDGE_MODEL` | Must differ from `LLM_MODEL` |
 
 Then apply migrations and build the corpus:
@@ -308,8 +309,13 @@ public exposure.
 ### Observability
 
 Prometheus scrapes `/metrics`; Grafana holds the dashboards; Alloy receives OTLP
-logs and forwards them to Loki; Opik traces retrieval and generation spans.
-**Telemetry failure never fails a user's request** — it is logged and dropped.
+logs and forwards them to Loki; Opik traces retrieval, generation, and the agent
+loop — one trace per job, with a child span per tool call, per query rewrite,
+and per provider attempt. **Telemetry failure never fails a user's request** —
+it is logged and dropped, and an integration test proves it by pointing Opik at
+a closed port and asserting the answer still arrives. Opik is hosted, so
+`OPIK_CAPTURE_CONTENT` decides whether user text leaves the server; see
+`docs/deployment.md` §5.
 
 Loki runs with `deletion_mode: disabled`. `retention_enabled: false` alone was
 not enough: deletion is separately enabled by default, so the compactor still
@@ -376,8 +382,15 @@ The system abstains rather than guessing. `NO_ACTIVE_INDEX`,
 four different failures with four different messages — collapsing them into
 "nothing found" is what hides an outage behind something that looks normal.
 
-*Planned:* the golden-set evaluation harness with Recall@k, citation
-correctness, and an LLM judge distinct from the model under test — tasks 16.1–16.5.
+Measured, not asserted. `uv run python -m scripts.evaluate` answers the ten
+hand-written questions in `docs/eval/golden-set.md` for real and writes
+`docs/eval/baseline.md`. Recall@k and citation correctness are computed without
+any model call; the qualitative dimensions come from an LLM judge that
+configuration refuses to let equal the model under test. The current baseline:
+Recall@8 0.767, citation correctness 0.625, grounded citations 1.000, abstention
+1.000. Clarification correctness is 0.800 — Q8 and Q9 answer instead of asking
+first, which is the open half of task 16.5. Nine judge verdicts were read
+against human judgement and all nine agreed (`docs/eval/judge-calibration.md`).
 
 ### 2. UI and user experience — 55 points
 
@@ -420,8 +433,11 @@ the same marker — text recalled from a previous turn is data too.
 | Logging and monitoring | Structured JSON logs, Prometheus metrics, and a dashboard where every figure derives from a recorded event and an unmeasured metric reports its absence instead of rendering as zero | `src/services/dashboard.py`, `monitoring/` |
 | Maintainable architecture | Jobs are persisted before they are enqueued and answered by a separate worker; SSE resumes from `Last-Event-ID`; a dead worker's lease expires and its job is reclaimed | `src/services/job_runner.py`, `src/services/jobs.py` |
 
+| LLM and RAG tracing | Opik spans for retrieval, generation, embeddings, FAQ generation, and every tool call and query rewrite in the agent loop, behind a switch that keeps the SDK unimported when off | `src/core/tracing.py`, `docs/deployment.md` §5 |
+| Evaluation | A ten-question hand-written golden set scored with model-free Recall@k and citation correctness, plus an LLM judge that configuration forbids from being the model under test | `src/services/evaluation/`, `docs/eval/baseline.md` |
+
 *Planned:* secret redaction in log records (14.3), cross-process correlation ids
-(14.5), Opik tracing spans (14.6), and per-request cost attribution (14.7).
+(14.5), and per-request cost attribution (14.7).
 
 ### 5. Deployment on Liara — 40 points
 

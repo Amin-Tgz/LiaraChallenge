@@ -424,9 +424,52 @@ ADMIN_USERNAME=
 ADMIN_PASSWORD=
 
 # --- Observability ---
+OPIK_ENABLED=false
 OPIK_API_KEY=
 OPIK_WORKSPACE=
+OPIK_URL_OVERRIDE=https://www.comet.com/opik/api
+OPIK_PROJECT_NAME=liara-docs-rescue
+OPIK_CAPTURE_CONTENT=true
+
+# --- Evaluation ---
+EVAL_JUDGE_MODEL=
+EVAL_RECALL_K=8
+EVAL_BASELINE_PATH=docs/eval/baseline.md
 ```
+
+### Opik tracing
+
+Off unless `OPIK_ENABLED=true` **and** a key and a workspace are set. With it
+off the `opik` package is never imported, so no client, queue, or sender
+thread exists. The client is built once, in the API lifespan and in
+`worker.main`, never on a request: against an unreachable backend construction
+costs about five seconds and a span costs about three milliseconds.
+
+Spans, all from `src/core/tracing.py`:
+
+| Span | Type | Carries |
+|---|---|---|
+| `agent.turn` | general (root) | one trace per job; `thread_id` is the conversation id |
+| `agent.tool.<name>` | tool | tool name, call index, result count, top similarity |
+| `agent.query_rewrite` | general | rewrite index and the rewritten query |
+| `retrieval.search_documentation` | tool | top-k, similarity threshold, candidate and result counts, top **similarity**, and the taxonomy code on each distinct failure |
+| `chat.completion` | llm | message and tool counts, fallback used, finish reason, latency, token usage |
+| `chat.attempt.<provider>` | general | one child per provider attempt, so the fallback path is visible |
+| `embeddings.batch` | llm | model, dimensions, input count and characters, token usage |
+| `faq.generate` | llm | model, chunk count, response size |
+| `eval.judge` | llm | judge model, model under test, each scored dimension |
+
+**Opik is hosted, so content leaves our infrastructure.** With
+`OPIK_CAPTURE_CONTENT=true` that means the user's question, the retrieved
+documentation text, the model's answer, and tool-call arguments. Setting it to
+`false` keeps every count, similarity, latency, model, token figure, and error
+code while sending none of the text. Credentials never leave either way: every
+span payload passes through the same `redact()` as the log path, and a unit
+test asserts it.
+
+A telemetry failure never fails a request. Every entry point is wrapped; the
+first failure disables tracing for the process and logs a warning, the same
+shape as `_telemetry_handler` for OTLP logs.
 
 > **Threshold units.** pgvector's `<=>` returns cosine *distance* (`1 - similarity`). Store and expose **similarity** everywhere — in the admin field, the API, and the logs — so `0.4` never means two different things in two places.
 

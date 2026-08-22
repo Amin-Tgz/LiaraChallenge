@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 from src.core.config import Settings, get_settings
 from src.core.errors import ErrorCode, RescueError
 from src.core.logging import get_logger
+from src.core.tracing import SpanRecorder, opik_span
 from src.db.models import UsageEvent
 from src.db.models.enums import UsageEventType
 from src.services.embeddings import CUSTOM_HOST_HEADER, PROVIDER_HEADER, PROVIDER_PROTOCOL
@@ -136,6 +137,19 @@ class GatewayChatClient:
     ) -> tuple[dict[str, Any], str | None, int, int, int]:
         url = f"{self.settings.portkey_base_url.rstrip('/')}/v1/chat/completions"
         provider_payload = {**payload, "model": provider.model}
+        with opik_span(f"chat.attempt.{provider.name}") as attempt:
+            # Only the model name and the shape of the request: headers carry
+            # the provider credential and must never reach a span.
+            attempt.metadata(provider=provider.name, model=provider.model)
+            return await self._attempt(attempt, url, provider, provider_payload)
+
+    async def _attempt(
+        self,
+        attempt: SpanRecorder,
+        url: str,
+        provider: _Provider,
+        provider_payload: Mapping[str, Any],
+    ) -> tuple[dict[str, Any], str | None, int, int, int]:
         try:
             response = await self.client.post(
                 url,
@@ -172,6 +186,14 @@ class GatewayChatClient:
             prompt_tokens = int(usage.get("prompt_tokens") or 0)
             completion_tokens = int(usage.get("completion_tokens") or 0)
             total_tokens = int(usage.get("total_tokens") or prompt_tokens + completion_tokens)
+            attempt.metadata(status_code=response.status_code, finish_reason=finish_reason)
+            attempt.usage(
+                model=provider.model,
+                provider=provider.name,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+            )
         except (KeyError, IndexError, TypeError, ValueError) as err:
             raise RescueError(
                 ErrorCode.INTERNAL_ERROR,
@@ -233,6 +255,53 @@ class GatewayChatClient:
         telemetry: GatewayTelemetry | None = None,
     ) -> ChatCompletion:
         """Return a completion, failing over only after a transient primary failure."""
+        with opik_span("chat.completion", kind="llm") as span:
+            span.metadata(
+                message_count=len(messages),
+                tool_count=len(tools) if tools else 0,
+                reasoning_effort=reasoning_effort,
+                max_completion_tokens=max_completion_tokens,
+                structured_output=response_format is not None,
+                trace_id=telemetry.trace_id if telemetry else None,
+            )
+            span.content(messages=[dict(message) for message in messages])
+            completion = await self._complete(
+                executor,
+                messages=messages,
+                tools=tools,
+                tool_choice=tool_choice,
+                response_format=response_format,
+                reasoning_effort=reasoning_effort,
+                max_completion_tokens=max_completion_tokens,
+                telemetry=telemetry,
+            )
+            span.metadata(
+                fallback_used=completion.fallback_used,
+                finish_reason=completion.finish_reason,
+                latency_ms=completion.latency_ms,
+            )
+            span.usage(
+                model=completion.model,
+                provider=completion.provider,
+                prompt_tokens=completion.prompt_tokens,
+                completion_tokens=completion.completion_tokens,
+                total_tokens=completion.total_tokens,
+            )
+            span.content_output(message=completion.message)
+            return completion
+
+    async def _complete(
+        self,
+        executor: Executor,
+        *,
+        messages: Sequence[Mapping[str, Any]],
+        tools: Sequence[Mapping[str, Any]] | None = None,
+        tool_choice: str | Mapping[str, Any] | None = None,
+        response_format: Mapping[str, Any] | None = None,
+        reasoning_effort: str | None = None,
+        max_completion_tokens: int | None = None,
+        telemetry: GatewayTelemetry | None = None,
+    ) -> ChatCompletion:
         if not messages:
             raise RescueError(ErrorCode.INVALID_REQUEST, detail="chat messages cannot be empty")
         payload: dict[str, Any] = {"messages": [dict(message) for message in messages]}

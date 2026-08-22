@@ -52,7 +52,14 @@ class Settings(BaseSettings):
     portkey_fallback_model: str = ""
 
     # --- Evaluation ---
+    #: The judge. Must differ from `llm_model`; see
+    #: `assert_judge_differs_from_model_under_test`.
     eval_judge_model: str = ""
+    #: The k in Recall@k over the golden set. Kept separate from
+    #: `retrieval_top_k` so tuning the product does not silently move the
+    #: baseline it is measured against.
+    eval_recall_k: int = 8
+    eval_baseline_path: str = "docs/eval/baseline.md"
 
     # --- Infrastructure ---
     database_url: str = "postgresql+asyncpg://rescue:rescue@localhost:5432/rescue"
@@ -173,8 +180,23 @@ class Settings(BaseSettings):
     admin_password: str = ""
 
     # --- Observability ---
+    #: Opik is the retrieval, generation, and agent trace backend. Off by
+    #: default: tracing must be opted into, and with it off the SDK is never
+    #: imported. Enabling it also needs a key and a workspace.
+    opik_enabled: bool = False
     opik_api_key: str = ""
     opik_workspace: str = ""
+    #: Managed Opik. The `/opik/api` suffix is what the hosted deployment
+    #: expects; a self-hosted instance ends in `/api` with no `/opik`.
+    opik_url_override: str = "https://www.comet.com/opik/api"
+    opik_project_name: str = "liara-docs-rescue"
+    #: Whether question, retrieved documentation, and answer text are attached
+    #: to spans. Opik is hosted, so this is the switch that decides whether
+    #: user content leaves our infrastructure. Turning it off keeps every
+    #: count, similarity, latency, model, and error code.
+    opik_capture_content: bool = True
+    #: Bound on the shutdown flush, so a stuck exporter cannot hold a deploy.
+    opik_flush_timeout_seconds: float = 5.0
     metrics_enabled: bool = True
     metrics_path: str = "/metrics"
     metrics_service_name: str = "liara-rescue-api"
@@ -300,6 +322,13 @@ class Settings(BaseSettings):
     def _absolute_metrics_path(cls, v: str) -> str:
         if not v.startswith("/") or v == "/":
             raise ValueError("METRICS_PATH must be an absolute non-root path")
+        return v
+
+    @field_validator("eval_recall_k")
+    @classmethod
+    def _positive_recall_k(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("EVAL_RECALL_K must be positive")
         return v
 
     @field_validator("agent_max_tool_calls", "agent_max_rewrites")

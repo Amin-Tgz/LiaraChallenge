@@ -19,6 +19,7 @@ from src.core.config import Settings, get_settings
 from src.core.errors import ErrorCode, RescueError
 from src.core.logging import get_logger
 from src.core.normalization import normalize_query, normalize_text
+from src.core.tracing import opik_span
 from src.db.models import Document, DocumentChunk, FaqItem, IndexVersion, UsageEvent
 from src.db.models.enums import FaqStatus, UsageEventType
 from src.services.embeddings import (
@@ -119,6 +120,21 @@ class GatewayFaqGenerator:
             self.client.close()
 
     def generate(self, *, title: str, chunks: list[dict[str, Any]]) -> str:
+        with opik_span("faq.generate", kind="llm") as span:
+            span.metadata(
+                model=self.settings.faq_llm_model,
+                reasoning_effort=self.settings.faq_reasoning_effort,
+                max_output_tokens=self.settings.faq_max_output_tokens,
+                max_items=self.settings.faq_items_per_document,
+                chunk_count=len(chunks),
+            )
+            span.content(title=title)
+            content = self._generate(title=title, chunks=chunks)
+            span.metadata(response_chars=len(content))
+            span.content_output(candidates=content)
+            return content
+
+    def _generate(self, *, title: str, chunks: list[dict[str, Any]]) -> str:
         url = f"{self.settings.portkey_base_url.rstrip('/')}/v1/chat/completions"
         payload = {
             "model": self.settings.faq_llm_model,
