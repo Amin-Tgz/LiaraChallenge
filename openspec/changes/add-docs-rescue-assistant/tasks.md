@@ -69,6 +69,40 @@ here. Carried into the next session:
     (ask → cited answer → reject → `/admin`), and the delete path returns 204
     for the owner.
 
+## 23. Documentation-page fidelity, the centred composer, and console legibility
+
+- [x] 23.1 Rebuild `/demo` as a reconstruction of the `docs.liara.ir` home page — right-hand rail with grouped chips and icons, centred command-palette search with a ⌘K hint, panel-login button, gradient welcome card, quick-start grid and product grid; verify the demonstration banner still names the page as invented and links to the real documentation, and that the widget stays keyboard-operable
+  - Verified 2026-08-22 against the supplied `docs.liara.ir` screenshot at
+    1440×900 in both themes and at 390×844. The two existing demo tests still
+    pass unchanged: the banner is still exposed as `role="note"`, still carries
+    «صفحهٔ نمایشی», still links to `https://docs.liara.ir/`, and the widget is
+    still focusable and opens the assistant from the keyboard.
+- [x] 23.2 Move the composer to the middle of the empty first screen at full size, and drop it back to the foot of the transcript once a question is in flight; verify the whole path — ask, judge, continue — still works from the centred box
+  - Verified 2026-08-22: only one composer is mounted at a time, so the
+    `#question` field stays unique. The four landing tests that drive the whole
+    path — offer, reject, zero-result, failed search — all pass against the
+    centred box without changes.
+- [x] 23.3 Grow the composer with what is typed and cap it at three lines, after which earlier lines scroll inside the box instead of resizing the page; verify the cap is derived from the element's own computed line height rather than a hardcoded pixel value
+  - Verified 2026-08-22 in the browser: two lines measured 85px, five lines
+    measured 113.68px with `overflow-y: auto` and `scrollTop` 57 — the box stops
+    at three lines and the earlier lines scroll up inside it. The ceiling is
+    `lineHeight * 3 + padding + borders`, all read from `getComputedStyle`.
+- [x] 23.4 Rewrite the landing copy in the assistant's own voice and drop the "enter the error message verbatim" instruction from the field hint
+- [x] 23.5 Keep every statistic inside its metric card — long questions, index ids and URLs wrap rather than overflow — and render a cited page as a link to that page, with the full address as its title and the path as its text; verify the URL reads left-to-right inside the RTL card
+  - Verified 2026-08-22 against a stubbed dashboard carrying a 36-character
+    index id, a 110-character Persian question and two long documentation URLs:
+    every card contained its own content at 1440×900 and 390×844 in both themes.
+    A new test asserts the cited page renders as a link whose `href` and `title`
+    are the full address and whose text is the path.
+- [x] 23.6 Run frontend lint, typecheck, tests and build; inspect `/`, `/demo` and `/admin` at 1440×900 and 390×844 in both themes
+  - Verified 2026-08-22: `npm run lint`, `npm run typecheck`, **29 tests** and
+    `vite build` all green. All three routes inspected at both sizes in both
+    themes; `documentElement.scrollWidth === clientWidth` at 390px, so there is
+    no horizontal overflow. The only console entries were two 500s from
+    `/api/v1/chat/conversations`, which is the local API being down in the dev
+    proxy, not page code.
+- [ ] 23.7 Update the README and deploy the web bundle
+
 - [ ] 1.1 Rotate the AvalAI API key exposed during planning and verify the old key returns 401
   - **Blocked on rotation, not on verification.** Checked 2026-08-21: the exposed key
     still authenticates — `scripts/verify_providers.py` reports HTTP 200 from

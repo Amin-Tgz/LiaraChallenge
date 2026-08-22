@@ -27,6 +27,7 @@ import { Citations } from '../components/Citations'
 import { JobProgress } from '../components/JobProgress'
 import { Markdown } from '../components/Markdown'
 import { ThinkingTrace } from '../components/ThinkingTrace'
+import { useAutoGrowingTextarea } from '../autogrow'
 import { submitTextareaOnEnter } from '../keyboard'
 
 /** A job still owed an answer, if the conversation has one. */
@@ -57,6 +58,7 @@ export default function ChatView({
   const [error, setError] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const transcriptEnd = useRef<HTMLDivElement | null>(null)
+  const followUpBox = useAutoGrowingTextarea(followUp)
 
   const stream = useJobStream(jobId)
 
@@ -197,6 +199,7 @@ export default function ChatView({
         <div className="composer-box">
           <textarea
             id="follow-up"
+            ref={followUpBox}
             rows={1}
             value={followUp}
             onChange={(event) => setFollowUp(event.target.value)}

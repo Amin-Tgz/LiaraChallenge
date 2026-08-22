@@ -55,8 +55,12 @@ being cut off.
 
 `/demo` is a stand-in Liara documentation page carrying the rescue widget, to
 show where this belongs: not on its own site, but in the corner of the page
-somebody is already stuck on. `/admin` is the operator console — feedback and
-metrics — behind the existing HTTP Basic guard.
+somebody is already stuck on. It reconstructs the shape of `docs.liara.ir` —
+right-hand rail, centred command-palette search, gradient welcome card,
+quick-start and product grids — and says plainly, in a banner that cannot be
+dismissed, that it is a reconstruction and not the real documentation.
+`/admin` is the operator console — feedback and metrics — behind the existing
+HTTP Basic guard.
 
 ---
 
@@ -384,6 +388,8 @@ correctness, and an LLM judge distinct from the model under test — tasks 16.1�
 | Code, links, and technical detail | Persian RTL body with LTR-isolated code blocks and inline code, syntax highlighting, per-block copy, and cited images beside the step they illustrate | `web/src/components/Markdown.tsx`, `Citations.tsx` |
 | Continuing a conversation | No turn limit. Older turns are summarized server-side, and a reload mid-answer restores the transcript and rejoins the running job instead of starting a second one | `src/services/summarization.py`, `web/src/views/ChatView.tsx` |
 | Responsive | Fixed sidebar on desktop, focus-managed drawer on mobile, safe-area-aware composer; verified at 375px and 1440px in both themes | `web/src/styles.css` |
+| Asking the first question | On the empty first screen the composer sits in the middle of the page at full size, and drops to the foot of the transcript once a question is in flight. It grows with what is typed and stops at three lines, after which the earlier lines scroll inside it rather than pushing the page around | `web/src/views/LandingView.tsx`, `web/src/autogrow.ts` |
+| Operator console legibility | Long questions, index ids, and URLs wrap inside their metric card instead of overflowing it, and a cited page is a link to that page rather than inert text | `web/src/views/AdminView.tsx` |
 | UX detail | Enter submits and Shift+Enter newlines with IME composition respected, visible focus rings, skip link, `aria-live` job status, persisted light/dark, and a favicon cropped to the readable part of the mark | `web/src/keyboard.ts`, `web/index.html` |
 
 ### 3. Agentic capability and personalization — 50 points

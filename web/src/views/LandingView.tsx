@@ -25,6 +25,7 @@ import {
 } from '../api/client'
 import type { FaqResult } from '../api/types'
 import { FaqGate } from '../components/FaqGate'
+import { useAutoGrowingTextarea } from '../autogrow'
 import { submitTextareaOnEnter } from '../keyboard'
 
 /** Concrete enough to be worth clicking, and all answerable from the corpus. */
@@ -46,6 +47,7 @@ export default function LandingView({ onConversationsChanged }: { onConversation
   const [stage, setStage] = useState<Stage>({ kind: 'idle' })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const questionBox = useAutoGrowingTextarea(question)
 
   function fail(cause: unknown) {
     setError(
@@ -154,6 +156,43 @@ export default function LandingView({ onConversationsChanged }: { onConversation
 
   const asked = stage.kind === 'searching' || stage.kind === 'gate' ? stage.question : null
 
+  // On the empty first screen the composer belongs in the middle of the page,
+  // with the intro above it — that is the one thing the visitor is here to do.
+  // Once a question is in flight it drops to its usual place at the foot of the
+  // transcript, where every following turn will be typed.
+  const composer = (
+    <form onSubmit={submit} className="composer">
+      <label className="visually-hidden" htmlFor="question">
+        سؤال شما
+      </label>
+      <div className="composer-box">
+        <textarea
+          id="question"
+          name="question"
+          ref={questionBox}
+          rows={1}
+          value={question}
+          onChange={(event) => setQuestion(event.target.value)}
+          onKeyDown={submitTextareaOnEnter}
+          aria-describedby="question-hint"
+          placeholder="مثلاً: هنگام استقرار برنامهٔ Django با liara deploy خطای پورت می‌گیرم…"
+          required
+        />
+        <button
+          type="submit"
+          className="send-button"
+          disabled={busy || question.trim().length === 0}
+          aria-label="ارسال سؤال"
+        >
+          <SendIcon />
+        </button>
+      </div>
+      <p id="question-hint" className="field-hint">
+        Enter برای ارسال و Shift+Enter برای خط جدید.
+      </p>
+    </form>
+  )
+
   return (
     <main className="chat-surface">
       <div className="chat-scroll">
@@ -173,12 +212,13 @@ export default function LandingView({ onConversationsChanged }: { onConversation
             </div>
             <div className="ask-intro">
               <span className="eyebrow">✨ جست‌وجوی هوشمند در مستندات</span>
-              <h2>چه چیزی شما را متوقف کرده؟</h2>
+              <h2>غمت نباشه، خودم برات درستش می‌کنم</h2>
               <p className="lead">
-                خطا، کاری که انجام داده‌اید و نتیجهٔ مورد انتظار را بنویسید؛ ابتدا پاسخ‌های
-                مرتبط را پیدا می‌کنیم و اگر کافی نبود، گفتگو را ادامه می‌دهیم.
+                سؤالت از لیارا چیه؟ بگو من حلش می‌کنم؛ ابتدا پاسخ‌های مرتبط را پیدا
+                می‌کنیم و اگر کافی نبود، گفتگو را ادامه می‌دهیم.
               </p>
             </div>
+            <div className="composer-centred">{composer}</div>
             <ul className="example-questions" aria-label="نمونهٔ پرسش‌ها">
               {EXAMPLES.map((example) => (
                 <li key={example}>
@@ -239,37 +279,7 @@ export default function LandingView({ onConversationsChanged }: { onConversation
         )}
       </div>
 
-      {stage.kind !== 'gate' && stage.kind !== 'resolved' && (
-        <form onSubmit={submit} className="composer">
-          <label className="visually-hidden" htmlFor="question">
-            سؤال شما
-          </label>
-          <div className="composer-box">
-            <textarea
-              id="question"
-              name="question"
-              rows={1}
-              value={question}
-              onChange={(event) => setQuestion(event.target.value)}
-              onKeyDown={submitTextareaOnEnter}
-              aria-describedby="question-hint"
-              placeholder="مثلاً: هنگام استقرار برنامهٔ Django با liara deploy خطای پورت می‌گیرم…"
-              required
-            />
-            <button
-              type="submit"
-              className="send-button"
-              disabled={busy || question.trim().length === 0}
-              aria-label="ارسال سؤال"
-            >
-              <SendIcon />
-            </button>
-          </div>
-          <p id="question-hint" className="field-hint">
-            پیام خطا را عیناً وارد کنید. Enter برای ارسال و Shift+Enter برای خط جدید.
-          </p>
-        </form>
-      )}
+      {stage.kind === 'searching' && composer}
     </main>
   )
 }

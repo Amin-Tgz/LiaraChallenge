@@ -1117,9 +1117,10 @@ img.brand-mark {
 }
 
 .composer-box textarea {
+  /* Height is set by `useAutoGrowingTextarea`, which caps it at three lines. */
   min-height: 44px;
-  max-height: 40vh;
   border: 0;
+  overflow-y: hidden;
   padding: 11px 8px;
   background: transparent;
   box-shadow: none;
@@ -1146,6 +1147,41 @@ img.brand-mark {
   margin: 8px 4px 0;
   font-size: 0.76rem;
   text-align: center;
+}
+
+/*
+ * The empty first screen puts the composer in the middle of the page instead
+ * of pinned to the bottom, and gives it more room: on a page whose only job is
+ * to take a question, the input is the page.
+ */
+.composer-centred {
+  width: 100%;
+  margin-block-start: 20px;
+}
+
+.composer-centred .composer {
+  position: static;
+  width: min(100%, 720px);
+  padding-block: 0;
+  background: none;
+}
+
+.composer-centred .composer-box {
+  border-radius: 26px;
+  padding: 8px 8px 8px 10px;
+}
+
+.composer-centred .composer-box textarea {
+  min-height: 52px;
+  padding: 14px 10px;
+  font-size: 1.02rem;
+}
+
+.composer-centred .send-button {
+  width: 46px;
+  min-width: 46px;
+  height: 46px;
+  min-height: 46px;
 }
 
 .visually-hidden {
@@ -1421,9 +1457,16 @@ img.brand-mark {
 
 /* --- Documentation demo -------------------------------------------------- */
 
+/*
+ * A reconstruction of the docs.liara.ir chrome: right-hand rail, centred
+ * command-palette search, gradient welcome card, quick-start and product
+ * grids. Close enough that the widget is judged in its real frame; labelled
+ * as a reconstruction so it is never mistaken for the real site.
+ */
+
 .docs-demo {
   min-height: 100dvh;
-  background: var(--bg);
+  background: var(--surface);
 }
 
 .demo-banner {
@@ -1436,96 +1479,307 @@ img.brand-mark {
 }
 
 .docs-demo-bar {
-  display: flex;
+  display: grid;
   align-items: center;
-  justify-content: space-between;
   gap: 16px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 20;
   border-block-end: 1px solid var(--border);
-  padding: 12px 24px;
+  padding: 8px 20px;
   background: var(--surface);
 }
 
 .docs-demo-brand {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  justify-self: start;
   font-weight: 800;
 }
 
 .docs-demo-brand img {
-  height: 28px;
+  height: 26px;
   object-fit: contain;
 }
 
-.docs-demo-search {
-  min-width: min(320px, 40vw);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 8px 12px;
-  background: var(--surface-subtle);
-  color: var(--muted);
-  font-size: 0.86rem;
-}
-
-.docs-demo-body {
-  display: grid;
-  width: min(100% - 32px, 1200px);
-  margin-inline: auto;
-  padding-block: 32px 96px;
-  gap: 40px;
-  grid-template-columns: 220px minmax(0, 1fr) 200px;
-}
-
-.docs-demo-nav h2 {
-  margin: 20px 0 8px;
-  color: var(--muted);
-  font-size: 0.76rem;
-  letter-spacing: 0.04em;
-}
-
-.docs-demo-nav ul,
-.docs-demo-outline ul {
-  display: grid;
-  margin: 0;
-  padding: 0;
-  gap: 4px;
-  list-style: none;
-  font-size: 0.88rem;
-}
-
-.docs-demo-nav li {
-  border-radius: 8px;
-  padding: 5px 8px;
-  color: var(--muted);
-}
-
-.docs-demo-nav li.current {
+.docs-demo-chip {
+  border-radius: 6px;
+  padding: 2px 8px;
   background: var(--primary-soft);
   color: var(--primary);
+  font-size: 0.76rem;
   font-weight: 700;
 }
 
-.docs-demo-crumbs {
-  margin-block: 0 8px;
+.docs-demo-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  justify-self: center;
+  width: min(100%, 330px);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: var(--surface);
   color: var(--muted);
   font-size: 0.84rem;
 }
 
-.docs-demo-article h2 {
-  margin-block: 32px 8px;
+.docs-demo-search-text {
+  flex: 1;
+  text-align: start;
 }
 
-.docs-demo-outline {
-  position: sticky;
-  inset-block-start: 24px;
-  align-self: start;
+.docs-demo-search kbd {
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0 6px;
+  background: var(--surface-subtle);
+  font-family: inherit;
+  font-size: 0.72rem;
 }
 
-.docs-demo-outline h2 {
-  margin: 0 0 8px;
+.docs-demo-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  justify-self: end;
+}
+
+.docs-demo-icon-slot {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
   color: var(--muted);
-  font-size: 0.76rem;
-  letter-spacing: 0.04em;
+}
+
+.docs-demo-panel-button {
+  border-radius: 8px;
+  padding: 6px 12px;
+  background: #16181d;
+  color: #ffffff;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+:root[data-theme='dark'] .docs-demo-panel-button {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  color: var(--fg);
+}
+
+.docs-demo-icon {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* --- The right-hand rail -------------------------------------------------- */
+
+.docs-demo-body {
+  display: grid;
+  width: 100%;
+  gap: 0;
+  grid-template-columns: 250px minmax(0, 1fr);
+  align-items: start;
+}
+
+.docs-demo-nav {
+  position: sticky;
+  inset-block-start: 47px;
+  max-height: calc(100dvh - 47px);
+  overflow-y: auto;
+  border-inline-start: 1px solid var(--border);
+  padding: 16px 16px 48px;
+}
+
+.docs-demo-nav-group + .docs-demo-nav-group {
+  margin-block-start: 18px;
+  border-block-start: 1px solid var(--border);
+  padding-block-start: 18px;
+}
+
+.docs-demo-nav-chip {
+  display: inline-block;
+  margin-block-end: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1px 8px;
+  background: var(--surface-subtle);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.docs-demo-nav ul {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  gap: 2px;
+  list-style: none;
+  font-size: 0.86rem;
+}
+
+.docs-demo-nav li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border-radius: 8px;
+  padding: 6px 8px;
+  color: var(--muted);
+}
+
+.docs-demo-nav li span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.docs-demo-nav li.current {
+  color: #0aa06e;
+  font-weight: 700;
+}
+
+/* --- Home content --------------------------------------------------------- */
+
+.docs-demo-main {
+  width: min(100% - 40px, 1010px);
+  margin-inline: auto;
+  padding-block: 28px 96px;
+}
+
+/* Wins over the landing page's own `.docs-welcome` sizing, which is defined
+   later in this file at equal specificity. */
+.docs-demo .docs-demo-hero {
+  min-height: 190px;
+  grid-template-columns: minmax(0, 1.15fr) minmax(220px, 0.95fr);
+  padding-inline: 30px 0;
+}
+
+.docs-demo .docs-demo-hero .welcome-copy {
+  padding-inline: 30px 0;
+}
+
+.docs-demo .docs-demo-hero h1 {
+  margin-block-end: 12px;
+  font-size: clamp(1.3rem, 2.3vw, 1.65rem);
+}
+
+.docs-demo-section-title {
+  margin-block: 44px 18px;
+  font-size: 1.35rem;
+  text-align: center;
+}
+
+.docs-demo-quickstart,
+.docs-demo-products {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  gap: 12px;
+  list-style: none;
+}
+
+.docs-demo-quickstart {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
+}
+
+.docs-demo-quickstart li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 10px;
+  background: var(--surface);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.docs-demo-mark {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  color: #ffffff;
+  direction: ltr;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.docs-demo-quickstart-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.docs-demo-arrow {
+  flex: none;
+  color: var(--muted);
+}
+
+.docs-demo-products {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+}
+
+.docs-demo-products li {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  background: var(--surface);
+}
+
+.docs-demo-product-icon {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+  color: var(--fg);
+}
+
+.docs-demo-products h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.docs-demo-products p {
+  margin: 0;
+  flex: 1;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.85;
+}
+
+.docs-demo-more {
+  align-self: flex-start;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 10px;
+  background: var(--surface-subtle);
+  font-size: 0.78rem;
+  font-weight: 700;
 }
 
 /* --- The rescue widget --------------------------------------------------- */
@@ -1764,6 +2018,11 @@ img.brand-mark {
   box-shadow: var(--shadow-sm);
 }
 
+.metric-card {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .metric-card h2 {
   margin: 0 0 10px;
   font-size: 0.9rem;
@@ -1778,6 +2037,8 @@ img.brand-mark {
 
 .metric-ratio strong,
 .metric-scalar {
+  display: block;
+  overflow-wrap: anywhere;
   font-size: 1.7rem;
 }
 
@@ -1809,16 +2070,41 @@ img.brand-mark {
   gap: 10px;
 }
 
+/*
+ * A question, a URL, or an index id can be longer than the card. It wraps
+ * instead of ellipsising — the operator is here to read it — and `min-width: 0`
+ * is what actually lets a flex item shrink far enough to wrap at all.
+ */
 .metric-row-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* A URL path is Latin text inside an RTL card: isolating it keeps the leading
+   slash at the start instead of flipping it to the far end. */
+.metric-row-link {
+  direction: ltr;
+  text-align: end;
+  text-decoration: underline;
+  unicode-bidi: isolate;
 }
 
 .metric-row-count {
   flex: none;
   color: var(--muted);
   font-weight: 700;
+}
+
+.metric-rows-fields .metric-row-label {
+  flex: none;
+}
+
+.metric-rows-fields .metric-row-count {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: start;
 }
 
 .metric-sample {
@@ -2105,8 +2391,15 @@ img.brand-mark {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .docs-demo-nav,
-  .docs-demo-outline {
+  .docs-demo-nav {
+    display: none;
+  }
+
+  .docs-demo-bar {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .docs-demo-actions {
     display: none;
   }
 
@@ -2174,13 +2467,15 @@ img.brand-mark {
     padding-block-end: 132px;
   }
 
-  .docs-welcome {
+  .docs-welcome,
+  .docs-demo .docs-demo-hero {
     min-height: 190px;
     grid-template-columns: 1fr;
     padding: 24px;
   }
 
-  .welcome-copy {
+  .welcome-copy,
+  .docs-demo .docs-demo-hero .welcome-copy {
     grid-column: 1;
   }
 
@@ -2188,7 +2483,8 @@ img.brand-mark {
     display: none;
   }
 
-  .welcome-copy {
+  .welcome-copy,
+  .docs-demo .docs-demo-hero .welcome-copy {
     padding: 0;
   }
 

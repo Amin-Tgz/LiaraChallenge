@@ -56,6 +56,25 @@ const METRIC_LABELS: Record<string, string> = {
   faq_corpus: 'وضعیت کورپوس FAQ',
 }
 
+/** Keys inside the object-valued metrics — the index and the FAQ corpus. */
+const FIELD_LABELS: Record<string, string> = {
+  index_version_id: 'شناسهٔ نسخهٔ ایندکس',
+  status: 'وضعیت',
+  source_commit: 'کامیت منبع',
+  document_count: 'تعداد سند',
+  chunk_count: 'تعداد قطعه',
+  embedding_model: 'مدل امبدینگ',
+  embedding_dimensions: 'ابعاد بردار',
+  activated_at: 'زمان فعال‌سازی',
+  created_at: 'زمان ساخت',
+  total: 'کل',
+  active: 'فعال',
+  awaiting_reembedding: 'در انتظار امبدینگ دوباره',
+  chat: 'چت',
+  skill: 'Skill',
+  mcp: 'MCP',
+}
+
 /** The order an operator reads them in: quality first, then demand, then health. */
 const METRIC_ORDER = [
   'chat_satisfaction_rate',
@@ -353,7 +372,7 @@ function MetricValue({ metric }: { metric: Metric }) {
       <ol className="metric-rows">
         {value.map((row, index) => (
           <li key={index}>
-            <span className="metric-row-label">{rowLabel(row)}</span>
+            <RowLabel row={row} />
             <span className="metric-row-count">{rowCount(row)}</span>
           </li>
         ))}
@@ -362,11 +381,15 @@ function MetricValue({ metric }: { metric: Metric }) {
   }
 
   if (value !== null && typeof value === 'object') {
+    // Field rows read as a definition list: a short label and a value that can
+    // be as long as an index id, so it is the value that gets to wrap.
     return (
-      <ol className="metric-rows">
+      <ol className="metric-rows metric-rows-fields">
         {Object.entries(value as Record<string, unknown>).map(([key, entry]) => (
           <li key={key}>
-            <span className="metric-row-label">{REASON_LABELS[key] ?? key}</span>
+            <span className="metric-row-label">
+              {FIELD_LABELS[key] ?? REASON_LABELS[key] ?? key}
+            </span>
             <span className="metric-row-count">{rowCount(entry)}</span>
           </li>
         ))}
@@ -377,11 +400,51 @@ function MetricValue({ metric }: { metric: Metric }) {
   return <strong className="metric-scalar">{String(value)}</strong>
 }
 
-function rowLabel(row: unknown): string {
-  if (row === null || typeof row !== 'object') return String(row)
+/**
+ * A row's own label, and — when the row is about a documentation page — the
+ * link to it.
+ *
+ * A cited page rendered as inert text is the one row an operator most wants to
+ * open: the whole reason it is on the dashboard is to go and read it. The full
+ * URL stays as the link's title while the visible text is just the path, so a
+ * long address cannot shove the count out of the card.
+ */
+function RowLabel({ row }: { row: unknown }) {
+  if (row === null || typeof row !== 'object') {
+    return <span className="metric-row-label">{String(row)}</span>
+  }
+
   const record = row as Record<string, unknown>
-  const candidate = record.question ?? record.source_url ?? record.day ?? record.code
-  return String(candidate ?? JSON.stringify(row))
+  const url = typeof record.source_url === 'string' ? record.source_url : null
+  if (url) {
+    return (
+      <a
+        className="metric-row-label metric-row-link"
+        href={url}
+        title={url}
+        target="_blank"
+        rel="noreferrer noopener"
+      >
+        {shortenUrl(url)}
+      </a>
+    )
+  }
+
+  const candidate = record.question ?? record.day ?? record.code
+  return (
+    <span className="metric-row-label">{String(candidate ?? JSON.stringify(row))}</span>
+  )
+}
+
+/** `https://docs.liara.ir/paas/django/deploy` → `/paas/django/deploy`. */
+function shortenUrl(url: string): string {
+  try {
+    const parsed = new URL(url)
+    return decodeURIComponent(parsed.pathname + parsed.hash) || parsed.hostname
+  } catch {
+    // Not a URL we can parse — showing it whole beats showing nothing.
+    return url
+  }
 }
 
 function rowCount(row: unknown): string {

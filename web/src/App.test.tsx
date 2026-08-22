@@ -531,6 +531,49 @@ test('a rejected admin login reports the cause and writes nothing to browser sto
   expect(sessionStorage.length).toBe(0)
 })
 
+test('a cited page in the statistics is a link to the page, not inert text', async () => {
+  const user = userEvent.setup()
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/admin/dashboard')) {
+        return jsonResponse({
+          window_days: 30,
+          metrics: {
+            top_cited_pages: {
+              value: [
+                { source_url: 'https://docs.liara.ir/paas/django/deploy', count: 12 },
+              ],
+              sample_size: 12,
+              unit: 'events',
+              no_data: false,
+            },
+          },
+        })
+      }
+      return jsonResponse({ items: [], total: 0 })
+    }),
+  )
+  render(
+    <MemoryRouter initialEntries={['/admin']}>
+      <Routes>
+        <Route path="/admin" element={<AdminView />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  await user.type(screen.getByLabelText('نام کاربری'), 'admin')
+  await user.type(screen.getByLabelText('رمز عبور'), 'secret')
+  await user.click(screen.getByRole('button', { name: 'ورود' }))
+  await user.click(await screen.findByRole('tab', { name: 'آمار' }))
+
+  const link = await screen.findByRole('link', { name: '/paas/django/deploy' })
+  expect(link.getAttribute('href')).toBe('https://docs.liara.ir/paas/django/deploy')
+  // The full address stays reachable even though the visible text is the path.
+  expect(link.getAttribute('title')).toBe('https://docs.liara.ir/paas/django/deploy')
+})
+
 // --- Shell -----------------------------------------------------------------
 
 test('the explicit theme control persists the selected light or dark theme', async () => {
