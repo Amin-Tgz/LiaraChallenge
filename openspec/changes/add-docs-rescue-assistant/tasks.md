@@ -101,7 +101,14 @@ here. Carried into the next session:
     no horizontal overflow. The only console entries were two 500s from
     `/api/v1/chat/conversations`, which is the local API being down in the dev
     proxy, not page code.
-- [ ] 23.7 Update the README and deploy the web bundle
+- [x] 23.7 Update the README and deploy the web bundle
+  - Verified 2026-08-22: README records the reconstructed demo page, the centred
+    three-line composer and the console legibility fix. Deployed with
+    `liara deploy --team-id … --liara-json liara.api.json --dockerfile
+    docker/Dockerfile.prod` — the API image is what builds and serves the web
+    bundle, so the worker did not need redeploying. `/health/ready` returns
+    `ready: true` with postgres, redis, active-index (`a60589fd`) and gateway
+    all ok, and `/` and `/demo` were inspected on the deployed instance.
 
 - [ ] 1.1 Rotate the AvalAI API key exposed during planning and verify the old key returns 401
   - **Blocked on rotation, not on verification.** Checked 2026-08-21: the exposed key
