@@ -112,6 +112,14 @@ Migrations are generated and applied through Alembic, with `alembic/env.py` read
 
 Broader backend layout — adopted selectively from the FastAPI Starter Kit reference, and what was deliberately left out — is in `docs/deployment.md` §6b.
 
+### A tracing facade rather than the SDK's decorators
+
+Spans are opened through one module of our own instead of decorating call sites with the tracing SDK's own decorators. Two reasons, both load-bearing. The requirement is that a telemetry failure never fails a request, and a facade makes that a property we wrap, assert, and test against a dead backend, rather than a behaviour we hope the vendor preserves across upgrades. And a decorator has to be imported to be applied, so decorating the call sites would load the SDK even in a deployment that has tracing switched off; the facade imports it lazily and a disabled deployment starts no client, queue, or sender thread.
+
+The cost is that framework auto-instrumentation is given up and each span is written by hand. At nine span sites that is cheap, and it buys the ability to decide per field what leaves the process — which is what makes content capture a switch rather than a rewrite.
+
+Naming is deliberate: the agent already has a `trace.emit(...)` that relays ThinkingTrace steps to the browser over SSE and is part of the product. The tracing entry points are `opik_span` and `opik_turn` so the two are not mistaken for each other.
+
 ### Serve the built frontend from the API origin
 
 Removes cross-site cookie configuration, credentialed CORS, and one deploy target simultaneously. API routes are namespaced under `/api/v1`; everything else falls through to the SPA. The trade-off — frontend and backend deploy together — is a benefit at this scale.
@@ -124,9 +132,11 @@ Removes cross-site cookie configuration, credentialed CORS, and one deploy targe
 
 **Worker-to-SSE relay overruns the schedule** → Narrow transport interface; in-process generation as a pre-planned substitution.
 
-**Retrieval quality on Persian questions is unproven** → The 10-question human-authored golden set gates merges; Recall@k and citation correctness are computed deterministically with no judge involved.
+**Retrieval quality on Persian questions is unproven** → The 10-question human-authored golden set gates merges; Recall@k and citation correctness are computed deterministically with no judge involved. *First baseline recorded 2026-08-22 in `docs/eval/baseline.md`: Recall@8 0.767, citation correctness 0.625, grounded citations 1.000, abstention 1.000. The gate itself is not wired yet — that is task 17.x.*
 
-**LLM-as-judge inflates scores** → Judge model must differ from the model under test; judge verdicts spot-checked against human verdicts on the golden set before any aggregate is trusted.
+**LLM-as-judge inflates scores** → Judge model must differ from the model under test; judge verdicts spot-checked against human verdicts on the golden set before any aggregate is trusted. *Spot-check done 2026-08-22 in `docs/eval/judge-calibration.md`: nine verdicts reviewed, all nine agreeing with human judgement. The tenth question produced no answer to judge, so the harness did not call the judge for it. The judge's error direction is strictness on groundedness, not leniency.*
+
+**The agent answers where it should ask** → Surfaced by the first golden-set run, not predicted: Q8 and Q9 both answer outright where a clarification is expected, holding clarification correctness at 0.800, and Q3 ends its turn with `NO_RESULTS_FOR_FILTER` when the agent filters on a metadata value the corpus does not carry. Abstention behaves correctly. Recorded under task 16.5 and left for a change of its own rather than patched inside the evaluation work.
 
 **Large English sub-trees skew retrieval on Persian questions** → Monitor their share of top-k during evaluation; ingest scope is configuration, so they can be excluded without code change.
 

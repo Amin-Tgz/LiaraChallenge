@@ -126,6 +126,27 @@ Failures in tracing, metrics, or logging infrastructure SHALL NOT cause a user r
 - **WHEN** the telemetry backend is unreachable during a request
 - **THEN** the user's request completes normally and the telemetry failure is recorded locally
 
+### Requirement: LLM tracing is opt-in and its content capture is explicit
+
+Retrieval, generation, and agent tracing SHALL be disabled unless explicitly enabled by configuration, and SHALL send no user or documentation text unless content capture is separately enabled. With content capture off, tracing SHALL still record result counts, similarities, latencies, model identities, token usage, and error codes. No credential, cookie, or token SHALL appear in a span under any configuration.
+
+The trace backend is hosted and outside our infrastructure, so enabling content capture is a decision to send the question, the retrieved documentation text, and the answer to a third party. The configuration SHALL make that decision explicit rather than implicit in turning tracing on.
+
+#### Scenario: Tracing disabled by default
+
+- **WHEN** the system runs without tracing explicitly enabled
+- **THEN** no trace client, queue, or background sender exists
+
+#### Scenario: Content capture withheld
+
+- **WHEN** tracing is enabled with content capture disabled
+- **THEN** spans carry counts, similarities, latency, models, token usage, and error codes, and carry neither the question, the retrieved documentation text, nor the answer
+
+#### Scenario: Credentials excluded from spans
+
+- **WHEN** a span would carry a value that is a key, cookie, token, or connection string
+- **THEN** that value is redacted before the span leaves the process
+
 ### Requirement: Operational metrics recorded
 
 The system SHALL record request counts, latency, and error rates; queue depth and wait time; job outcomes including retries; provider fallback occurrences and circuit state; token usage and cost; cache hit rate; retrieval latency; FAQ resolution outcomes; transitions to each rescue tool; the active index commit and status; and the count of questions answered without sufficient evidence.
@@ -145,6 +166,11 @@ trace backend. Monitoring failures SHALL remain isolated from user requests.
 
 - **WHEN** Prometheus, Grafana, Loki, Alloy, or Opik is unavailable during a rescue request
 - **THEN** the request continues and the telemetry delivery failure is logged without exposing credentials
+
+#### Scenario: One trace per answered question
+
+- **WHEN** a question is answered by the bounded agent
+- **THEN** its retrieval, each tool call, each query rewrite, and each provider attempt appear as spans of a single trace for that job, grouped with the other turns of its conversation
 
 
 #### Scenario: Cost attributable

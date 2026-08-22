@@ -9,6 +9,11 @@ here. Carried into the next session:
   all-providers-unavailable
 - **16.5** — the golden set runs and its baseline is recorded, but Q8 and Q9
   answer instead of asking, and Q3 fails with `NO_RESULTS_FOR_FILTER`
+- **`specs/evaluation/`** — the change has no delta spec for evaluation. The
+  proposal's "What Changes" and tasks 16.x cover it and the code now exists,
+  but `proposal.md` lists eight capabilities and evaluation is not one of them.
+  Needs its own capability spec plus a line in the proposal's Capabilities
+  section; see `openspec instructions specs --change add-docs-rescue-assistant`
 - **17.x** — CI, gated deploy with rollback, scheduled reindex, security checklist
 - **18.x** — demo rehearsal and the Definition-of-Done pass
 
